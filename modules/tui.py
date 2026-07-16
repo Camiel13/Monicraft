@@ -22,25 +22,56 @@ class TUI(App):
     #sidebar {
         width: 1fr;
         align: center middle;
+        text-align: center;
+        background: #232e24;
     }
     
     #console {
         width: 4fr;
     }
     
-    #console-input {
-        padding: 1;
-        border: none;
-        align: center middle;
+    #input-box {
+        width: 100%;
+        height: 3;
     }
     
     #console-log {
         padding: 1;
         overflow-y: auto;
+        background: #b4cfb6;
+    }
+    
+    #console-input {
+        padding: 1;
+        border: none;
+        align: center middle;
+        background: #232e24;
+    }
+    
+    #chat-mode-button {
+        min-width: 7;
+        height: 3;
+        background: #3a473b;
+        border: none;
+        margin: 0;
+    }
+    #chat-mode-button:hover {
+        background: #485749;
+    }
+    #chat-mode-button.activated {
+        background: #52a157;
+    }
+    #chat-mode-button.activated:hover {
+        background: #5aad5f;
     }
     
     .stats {
-        margin: 5
+        min-width: 35;
+        min-height: 6;
+        margin: 5;
+        padding: 3;
+        border: inner #455446;
+        background: #3a473b;
     }
     """
     BINDINGS = [("q", "quit", "exit")]
@@ -49,7 +80,7 @@ class TUI(App):
         super().__init__(**kwargs)
         self.api = api_client
         self.ws = None
-        # self.console_log en self.console_input worden in on_mount geïnitialiseerd
+        self.chat_mode = False
     
     def compose(self):
         yield Header(show_clock=True, name="Monicraft", icon="")
@@ -60,15 +91,20 @@ class TUI(App):
                 yield Label("Connecting to server...", classes="stats", id="cpu-usage")
             with Vertical(id="console"):
                 yield RichLog(id="console-log", highlight=True, markup=True)
-                yield Input(id="console-input", placeholder="Type a minecraft command to send it to the server...")
+                with Horizontal(id="input-box"):
+                    yield Button(label="✉", classes="button", id="chat-mode-button")
+                    yield Input(id="console-input", placeholder="Type a minecraft command to send it to the server...")
                     
     async def on_mount(self):
-        # Define the elements as variables for easy acces
+        # Define the elements as variables for easy access
         self.console_log = self.query_one("#console-log", RichLog)
         self.console_input = self.query_one("#console-input", Input)
         self.server_status = self.query_one("#server-status", Label)
         self.ram_usage = self.query_one("#ram-usage", Label)
         self.cpu_usage = self.query_one("#cpu-usage", Label)
+        
+        # Tweak the created components
+        self.query_one("#chat-mode-button", Button).can_focus = False
         
         # Put the cursor in the console input
         self.console_input.focus()
@@ -135,6 +171,8 @@ class TUI(App):
             await self.connect_ws()
             
         try:
+            command = f"say {command}" if self.chat_mode else command
+            
             payload = {
                 "event": "send command",
                 "args": [command]
@@ -151,3 +189,14 @@ class TUI(App):
             if command:
                 event.input.value = "" # clear the text in the input
                 await self.send_command(command)
+                
+    async def on_button_pressed(self, event: Button.Pressed):
+        if event.button.id == "chat-mode-button":
+            self.chat_mode = not self.chat_mode
+            
+            if self.chat_mode:
+                event.button.add_class("activated")
+            else:
+                event.button.remove_class("activated")
+                
+            event.button.refresh()
