@@ -1,7 +1,8 @@
 import asyncio
 from modules.api import API
-from modules.utils import console
 from modules.tui import TUI
+from modules.utils import console
+from modules.settings import Settings
 
 class Monicraft:
     def __init__(self):

@@ -2,11 +2,15 @@ import json
 import asyncio
 import websockets
 from .utils import console
+from .settings import Settings
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Header, RichLog, Input, Label, Button
 
 class TUI(App):
+    SCREENS = {
+        "settings": Settings
+    }
     TITLE = "Monicraft"
     SUB_TITLE = "Console & Server Monitoring"
     CSS = """
@@ -22,7 +26,6 @@ class TUI(App):
     #sidebar {
         width: 1fr;
         align: center middle;
-        text-align: center;
         background: #232e24;
     }
     
@@ -39,6 +42,7 @@ class TUI(App):
         padding: 1;
         overflow-y: auto;
         background: #b4cfb6;
+        scrollbar-visibility: hidden;
     }
     
     #console-input {
@@ -73,6 +77,23 @@ class TUI(App):
         border: inner #455446;
         background: #3a473b;
     }
+    
+    #power-buttons {
+        align: center middle;
+        width: 100%;
+    }
+    .power-button {
+        border: none;
+        min-width: 7;
+        height: 3;
+        padding: 1;
+        background: #3a473b;
+        margin: 2;
+        align: center middle;
+    }
+    .power-button:hover {
+        background: #485749;
+    }
     """
     BINDINGS = [("q", "quit", "exit")]
     
@@ -86,13 +107,17 @@ class TUI(App):
         yield Header(show_clock=True, name="Monicraft", icon="")
         with Horizontal(id="body"):
             with Vertical(id="sidebar"):
+                with Horizontal(id="power-buttons"):
+                    yield Button("▶", id="start-button", classes="power-button")
+                    yield Button("↻", id="restart-button", classes="power-button")
+                    yield Button("■", id="stop-button", classes="power-button")
                 yield Label("Connecting to server...", classes="stats", id="server-status")
                 yield Label("Connecting to server...", classes="stats", id="ram-usage")
                 yield Label("Connecting to server...", classes="stats", id="cpu-usage")
             with Vertical(id="console"):
                 yield RichLog(id="console-log", highlight=True, markup=True)
                 with Horizontal(id="input-box"):
-                    yield Button(label="✉", classes="button", id="chat-mode-button")
+                    yield Button(label="✉", id="chat-mode-button")
                     yield Input(id="console-input", placeholder="Type a minecraft command to send it to the server...")
                     
     async def on_mount(self):
@@ -104,13 +129,14 @@ class TUI(App):
         self.cpu_usage = self.query_one("#cpu-usage", Label)
         
         # Tweak the created components
-        self.query_one("#chat-mode-button", Button).can_focus = False
+        for button in self.query(Button):
+            button.can_focus = False
         
         # Put the cursor in the console input
         self.console_input.focus()
         
         # Start receiving data
-        self.run_worker(self.stream_data, thread=False)
+        self.run_worker(self.connect_ws, thread=False)
         
     async def on_unmount(self):
         if self.ws:
@@ -130,16 +156,22 @@ class TUI(App):
             
             await self.ws.send(json.dumps(auth_message))
             
+            self.run_worker(self.stream_data, thread=False)
+            
             self.console_log.write("[green]Succesfully connected to the server![/]")
             return True
         except Exception as e:
-            self.console_log.write("[bold red]Couldn't connect to the server![/]")
+            self.console_log.write(f"[bold red]Couldn't connect to the server: {e}[/]")
+            self.notify(title="Couldn't connect to server!",
+                        message=f"Server connection could not be established: {e}",
+                        severity="error",
+                        timeout=10.0
+            )
+            
+            # Wait 5 seconds until next try
+            await asyncio.sleep(5)
     
     async def stream_data(self):        
-        if not self.ws:
-            self.console_log.write("[bold red]No connection with the server. Establishing now...[/]")
-            await self.connect_ws()
-                    
         try:   
             async for m in self.ws:
                 data = json.loads(m)
@@ -164,8 +196,15 @@ class TUI(App):
             
         except Exception as e:
             self.console_log.write(f"[bold red]Server connection lost: {e}[/]")
+            self.notify(title="Server Connection error",
+                        message=f"Server connection lost: {e}",
+                        severity="error",
+                        timeout=10.0
+                        )
             
-            
+            # Try reconnecting, this will loop every 5 seconds if creds are wrong.
+            self.run_worker(self.connect_ws, thread=False)
+                        
     async def send_command(self, command: str):
         if not self.ws:
             await self.connect_ws()
@@ -183,9 +222,33 @@ class TUI(App):
         except Exception as e:
             self.console_log.write(f"[bold red] Command couldn't be sent: {e}[/]")
             
+    async def send_power_action(self, action: str):
+        if action not in ["restart", "start", "stop"]:
+            return
+        
+        if not self.ws:
+            await self.connect_ws()
+        
+        try:
+            payload = {
+                "event": "set state",
+                "args": [action]
+            }
+            
+            await self.ws.send(json.dumps(payload))
+        
+        except Exception as e:
+            self.console_log.write(f"[bold red] Power action couldn't be sent: {e}[/]")        
+            
+            
     async def on_input_submitted(self, event: Input.Submitted):
         if event.input.id == "console-input":
             command = event.value.strip()
+            if command == "settings":
+                self.push_screen("settings")
+                event.input.value = ""
+                return
+            
             if command:
                 event.input.value = "" # clear the text in the input
                 await self.send_command(command)
@@ -197,6 +260,13 @@ class TUI(App):
             if self.chat_mode:
                 event.button.add_class("activated")
             else:
-                event.button.remove_class("activated")
-                
-            event.button.refresh()
+                event.button.remove_class("activated")        
+        
+        if event.button.id == "start-button":
+            await self.send_power_action(action="start")
+        elif event.button.id == "restart-button":
+            await self.send_power_action(action="restart")
+        elif event.button.id == "stop-button":
+            await self.send_power_action(action="stop")    
+        
+        event.button.refresh()
