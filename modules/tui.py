@@ -102,6 +102,32 @@ class TUI(App):
     .power-button:hover {
         background: #485749;
     }
+    
+    #nav-buttons {
+        width: 100%;
+        margin: 1;
+        align: center bottom;
+    }
+    .nav-button {
+        border: none;
+        min-width: 9;
+        height: 3;
+        padding: 0 1;
+        background: #3a473b;
+        margin: 0 1;
+        align: center middle;
+        content-align: center middle;
+    }
+    .nav-button:hover {
+        background: #485749;
+    }
+    
+    #kill-button.confirm {
+        background: red;
+    }
+    #kill-button.confirm:hover {
+        background: darkred;
+    }
     """
     BINDINGS = [("q", "quit", "exit")]
     
@@ -120,9 +146,13 @@ class TUI(App):
                     yield Button("▶", id="start-button", classes="power-button")
                     yield Button("↻", id="restart-button", classes="power-button")
                     yield Button("■", id="stop-button", classes="power-button")
+                    yield Button("☠", id="kill-button", classes="power-button")
                 yield Label("Connecting to server...", classes="stats", id="server-status")
                 yield Label("Connecting to server...", classes="stats", id="ram-usage")
                 yield Label("Connecting to server...", classes="stats", id="cpu-usage")
+                with Horizontal(id="nav-buttons"):
+                    yield Button(label="⚙", id="settings-button", classes="nav-button")
+                    yield Button(label="⚒", id="mods-button", classes="nav-button")
             with Vertical(id="console"):
                 yield RichLog(id="console-log", highlight=True, markup=True)
                 with Horizontal(id="input-box"):
@@ -237,7 +267,7 @@ class TUI(App):
             )
             
     async def send_power_action(self, action: str):
-        if action not in ["restart", "start", "stop"]:
+        if action not in ["restart", "start", "stop", "kill"]:
             return
         
         if not self.ws:
@@ -285,6 +315,21 @@ class TUI(App):
         elif event.button.id == "restart-button":
             await self.send_power_action(action="restart")
         elif event.button.id == "stop-button":
-            await self.send_power_action(action="stop")    
+            await self.send_power_action(action="stop")   
+        elif event.button.id == "kill-button":
+            if "confirm" not in event.button.classes:
+                self.notify(title="Are you sure you want to kill the server?",
+                            message=f"This can lead to data loss or corruption. Press again to confirm.",
+                            severity="error",
+                            timeout=10.0
+                )
+                event.button.add_class("confirm")
+                self.set_timer(10.0, lambda: event.button.remove_class("confirm"))
+            else:
+                await self.send_power_action(action="kill")
+                event.button.remove_class("confirm")
         
-        event.button.refresh()
+        if event.button.id == "mods-button":
+            self.push_screen("mods")
+        if event.button.id == "settings-button":
+            self.push_screen("settings")
