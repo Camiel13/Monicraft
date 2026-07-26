@@ -1,5 +1,4 @@
 import os
-from .api import API
 from textual.screen import Screen
 from dotenv import load_dotenv, set_key
 from textual.containers import Horizontal, Vertical
@@ -9,8 +8,8 @@ class Settings(Screen):
     AUTO_FOCUS = "#api_key"
     CSS="""
         .creds-box {
-            padding: 2;
-            margin: 3;
+            padding: 1;
+            margin: 1 2;
         }
         Input {
             margin-top: 1;

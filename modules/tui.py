@@ -1,6 +1,7 @@
 import json
 import asyncio
 import websockets
+from .mods import Mods
 from .utils import console
 from .settings import Settings
 from textual.app import App, ComposeResult
@@ -9,7 +10,8 @@ from textual.widgets import Header, RichLog, Input, Label, Button
 
 class TUI(App):
     SCREENS = {
-        "settings": Settings
+        "settings": Settings,
+        "mods": Mods
     }
     TITLE = "Monicraft"
     SUB_TITLE = "Console & Server Monitoring"
@@ -17,6 +19,7 @@ class TUI(App):
     Header {
        height: 3;
        align: center middle;
+       background: darkgreen;
     }
     
     #body {
@@ -25,8 +28,11 @@ class TUI(App):
     
     #sidebar {
         width: 1fr;
-        align: center middle;
+        min-width: 25;
+        max-width: 40;
+        align: center top;
         background: #232e24;
+        padding: 1;
     }
     
     #console {
@@ -53,7 +59,7 @@ class TUI(App):
     }
     
     #chat-mode-button {
-        min-width: 7;
+        min-width: 5;
         height: 3;
         background: #3a473b;
         border: none;
@@ -70,25 +76,27 @@ class TUI(App):
     }
     
     .stats {
-        min-width: 35;
-        min-height: 6;
-        margin: 5;
-        padding: 3;
+        width: 100%;
+        height: auto;
+        margin-top: 1;
+        padding: 1;
         border: inner #455446;
         background: #3a473b;
+        text-align: center;
     }
     
     #power-buttons {
         align: center middle;
         width: 100%;
+        height: auto;
     }
     .power-button {
         border: none;
-        min-width: 7;
+        min-width: 5;
         height: 3;
-        padding: 1;
+        padding: 0 1;
         background: #3a473b;
-        margin: 2;
+        margin: 0 1;
         align: center middle;
     }
     .power-button:hover {
@@ -102,6 +110,7 @@ class TUI(App):
         self.api = api_client
         self.ws = None
         self.chat_mode = False
+        print(self.api.get_mods)
     
     def compose(self):
         yield Header(show_clock=True, name="Monicraft", icon="")
@@ -221,6 +230,11 @@ class TUI(App):
             
         except Exception as e:
             self.console_log.write(f"[bold red] Command couldn't be sent: {e}[/]")
+            self.notify(title="Command couldn't be send!",
+                        message=f"The command could not been send to the server: {e}",
+                        severity="error",
+                        timeout=10.0
+            )
             
     async def send_power_action(self, action: str):
         if action not in ["restart", "start", "stop"]:
@@ -246,6 +260,10 @@ class TUI(App):
             command = event.value.strip()
             if command == "settings":
                 self.push_screen("settings")
+                event.input.value = ""
+                return
+            elif command == "mods":
+                self.push_screen("mods")
                 event.input.value = ""
                 return
             
