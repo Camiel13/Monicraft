@@ -3,7 +3,9 @@ import asyncio
 import websockets
 from .mods import Mods
 from .utils import console
+from .players import Players
 from .settings import Settings
+from mcstatus import JavaServer
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Header, RichLog, Input, Label, Button
@@ -11,7 +13,8 @@ from textual.widgets import Header, RichLog, Input, Label, Button
 class TUI(App):
     SCREENS = {
         "settings": Settings,
-        "mods": Mods
+        "mods": Mods,
+        "players": Players
     }
     TITLE = "Monicraft"
     SUB_TITLE = "Console & Server Monitoring"
@@ -136,7 +139,9 @@ class TUI(App):
         self.api = api_client
         self.ws = None
         self.chat_mode = False
-        print(self.api.get_mods)
+        self.query_enabled = True
+        self.status_server = None
+        self.query_server = None
     
     def compose(self):
         yield Header(show_clock=True, name="Monicraft", icon="")
@@ -153,6 +158,7 @@ class TUI(App):
                 with Horizontal(id="nav-buttons"):
                     yield Button(label="⚙", id="settings-button", classes="nav-button")
                     yield Button(label="⚒", id="mods-button", classes="nav-button")
+                    yield Button(label="☺", id="players-button", classes="nav-button")
             with Vertical(id="console"):
                 yield RichLog(id="console-log", highlight=True, markup=True)
                 with Horizontal(id="input-box"):
@@ -160,6 +166,10 @@ class TUI(App):
                     yield Input(id="console-input", placeholder="Type a minecraft command to send it to the server...")
                     
     async def on_mount(self):
+        # Get the server address
+        self.server_ip, self.server_port = self.api.get_server_address()
+        self.server = JavaServer.lookup(f"{self.server_ip}:{self.server_port}")        
+        
         # Define the elements as variables for easy access
         self.console_log = self.query_one("#console-log", RichLog)
         self.console_input = self.query_one("#console-input", Input)
@@ -174,8 +184,9 @@ class TUI(App):
         # Put the cursor in the console input
         self.console_input.focus()
         
-        # Start receiving data
+        # Start the background workers
         self.run_worker(self.connect_ws, thread=False)
+        self.run_worker(self.update_server_status, thread=False)
         
     async def on_unmount(self):
         if self.ws:
@@ -331,5 +342,34 @@ class TUI(App):
         
         if event.button.id == "mods-button":
             self.push_screen("mods")
-        if event.button.id == "settings-button":
+        elif event.button.id == "settings-button":
             self.push_screen("settings")
+        elif event.button.id == "players-button":
+            self.push_screen("players")
+            
+    async def update_server_status(self):
+        while True:
+            try:
+                self.status_server = await self.server.async_status()
+            except Exception as e:
+                self.status_server = None
+                self.notify(title="Error while pinging server stats",
+                            message=f"An error occurred while pinging the server: {e}",
+                            severity="error",
+                            timeout=10.0
+                )
+            
+            if self.query_enabled:
+                try:
+                    self.query_server = await self.server.async_query()
+                except Exception:
+                    self.query_enabled = False
+                    self.query_server = None
+                    self.notify(title="Failed to get query!",
+                                message=f"Failed to get a query from the server. You can turn this on in you server.properties by setting enable-query to true. This may lead to innaccurate player statistics.",
+                                severity="warning",
+                                timeout=10.0
+                    )
+                
+                
+            await asyncio.sleep(10)

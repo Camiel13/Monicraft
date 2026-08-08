@@ -1,4 +1,6 @@
+import io
 import os
+import nbtlib
 import hashlib
 import requests
 from .utils import console
@@ -27,7 +29,7 @@ class API:
         socket_url = data["socket"]
         
         return token, socket_url
-    
+  
     def get_mods(self):
         response = requests.get(
             url=f"{self.url}/files/list",
@@ -38,3 +40,74 @@ class API:
         if response.status_code == 200:
             data = response.json()
             return data["data"]
+
+    """    
+    def get_versions(self):
+        response = requests.get(
+            url=f"{self.url}/startup",
+            headers=self.headers,
+        )
+        
+        if response.status_code == 200:
+            items = response.json().get("data")
+        else:
+            self.notify(severity="error",
+                        title="Failed to get version data!",
+                        message=f"An error occured while getting the version data: {response.status_code}")
+            return
+    """
+    
+    def get_server_address(self):
+        response = requests.get(
+            url=f"{self.url}/network/allocations",
+            headers = self.headers
+        )
+
+        if response.status_code == 200:
+            data = response.json().get("data")
+            alloc = next(item["attributes"] for item in data if item["attributes"]["is_default"])
+            ip, port = alloc["ip"], alloc["port"]
+            return ip, port
+        else:
+            self.notify(severity="error",
+                        title="Failed to get server address!",
+                        message=f"An error occured while getting the address: {response.status_code}, {response.text}")
+            return None, None
+    
+    def get_player_uuid(self, name: str) -> str:
+        response = requests.get(
+            url=f"{self.url}/files/contents",
+            headers=self.headers,
+            params={"file": "usercache.json"}
+        )
+        
+        if response.status_code == 200:
+            usercache = response.json()
+            uuid = next(item["uuid"] for item in usercache if item["name"] == name)
+            return uuid
+        else:
+            self.notify(severity="error",
+                        title="Failed to get user cache!",
+                        message=f"An error occured while getting the user cache: {response.status_code}, {response.text}")
+            return None
+
+        
+    def get_player_data(self, name=None, uuid=None) -> object:
+        if not uuid:
+            uuid = self.get_player_uuid(name)
+        
+        response = requests.get(
+            url=f"{self.url}/files/contents",
+            headers=self.headers,
+            params={"file": f"world/playerdata/{uuid}.dat"}
+        )
+        
+        if response.status_code == 200:
+            temp_file = io.BytesIO(response.content)
+            nbt_data = nbtlib.load(fileobj=temp_file, gzipped=True)
+            return nbt_data
+        else:
+            self.notify(severity="error",
+                        title="Failed to get user data!",
+                        message=f"An error occured while getting the user data: {response.status_code}, {response.text}")
+            return None
