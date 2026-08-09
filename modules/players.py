@@ -5,7 +5,7 @@ from textual.containers import Horizontal, Vertical
 from textual.widgets import Header, Input, Label, Button, DataTable
 
 class Players(Screen):
-    AUTO_FOCUS="#mods-table"
+    AUTO_FOCUS="#player-table"
     CSS = """
     Button {
         margin: 1;
@@ -14,12 +14,27 @@ class Players(Screen):
         min-width: 8;
         content-align: center middle;
     }
+    #player-table {
+        width: 100%;
+        height: 1fr;
+    }
+    #footer {
+        dock: bottom;
+        height: auto;
+    }
     """
     
     def compose(self):
         yield Header(name="Player Manager", show_clock=True)
         yield Button(label="<", id="back-button")
         yield DataTable(id="player-table")
+        with Horizontal(id="footer"):
+            yield Button(label="Stats", id="stats-button")
+            yield Button(label="Message", id="message-button")
+            yield Button(label="Kick", id="kick-button")
+            yield Button(label="Ban", id="ban-button")
+            yield Button(label="Gamemode", id="gamemode-button")
+            
     
     def on_mount(self):
         self.table = self.query_one("#player-table")
@@ -32,15 +47,25 @@ class Players(Screen):
             button.can_focus = False
             
     async def build_table(self):
-        if self.app.query_server and self.app.query_server.players.names:
-            for player in self.app.query_server.players.names:
-                player_uuid = self.app.api.get_player_uuid(name=player)
-                nbt_data = self.app.api.get_player_data(uuid=player_uuid)
-                self.add_player_to_table(nbt_data, player)    
+        if self.app.query_server and self.app.query_server.players.list:
+            for player in self.app.query_server.players.list:
+                try: 
+                    player_uuid = self.app.api.get_player_uuid(name=player)
+                    nbt_data = self.app.api.get_player_data(uuid=player_uuid)
+                    self.add_player_to_table(nbt_data, player)
+                except Exception as e:
+                    self.notify(severity="error",
+                                title="Failed to get players through query!",
+                                message=f"Failed to get players through query: {e}.")
         elif self.app.status_server and self.app.status_server.players.sample:
-            for player in self.app.status_server.players.sample:
-                nbt_data = self.app.api.get_player_data(uuid=player.id)
-                self.add_player_to_table(nbt_data, player.name)
+            try:
+                for player in self.app.status_server.players.sample:
+                    nbt_data = self.app.api.get_player_data(uuid=player.id)
+                    self.add_player_to_table(nbt_data, player.name)
+            except Exception as e:
+                self.notify(severity="error",
+                            title="Failed to get players through ping!",
+                            message=f"Failed to get players through ping: {e}.")
         else:
             await asyncio.sleep(5)
             self.build_table()
@@ -72,6 +97,26 @@ class Players(Screen):
             gamemode
         )
         
-    def on_button_pressed(self, event: Button.Pressed):
+    async def on_button_pressed(self, event: Button.Pressed):
         if event.button.id == "back-button":
             self.dismiss()
+            
+        if event.button.id in ["stats-button", "message-button", "kick-button", "ban-button", "gamemode-button"]:
+            if self.table.row_count > 0:
+                selected_row = self.table.cursor_row
+                row_data = self.table.get_row_at(selected_row)
+                
+                player_name = row_data[0]
+                
+                if event.button.id == "stats-button":
+                    pass # TODO: ADD LOGIC TO SHOW STATS FROM FILES
+                elif event.button.id == "message-button":
+                    pass # TODO: ADD POPUP TO SEND A MESSAGE THROUGH THE TELLRAW COMMAND
+                elif event.button.id == "kick-button":
+                    await self.app.send_command(f"kick {player_name}") # TODO: ADD LOGIC TO ADD A REASON
+                elif event.button.id == "ban-button":
+                    await self.app.send_command(f"ban {player_name}") # TODO: ADD LOGIC TO ADD A REASON
+                elif event.button.id == "gamemode-button":
+                    pass # ADD A POPUP TO CHOOSE GAMEMODE
+
+                    

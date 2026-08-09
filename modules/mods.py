@@ -15,6 +15,10 @@ class Mods(Screen):
         min-width: 8;
         content-align: center middle;
     }
+    #mods-table {
+        width: 100%;
+        height: 1fr;
+    }
     """
     
     @property

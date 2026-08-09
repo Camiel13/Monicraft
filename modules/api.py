@@ -3,6 +3,7 @@ import os
 import nbtlib
 import hashlib
 import requests
+import gzip
 from .utils import console
 from dotenv import load_dotenv, set_key
 
@@ -104,7 +105,8 @@ class API:
         
         if response.status_code == 200:
             temp_file = io.BytesIO(response.content)
-            nbt_data = nbtlib.load(fileobj=temp_file, gzipped=True)
+            with gzip.GzipFile(fileobj=temp_file) as gz:
+                nbt_data = nbtlib.File.from_fileobj(gz)
             return nbt_data
         else:
             self.notify(severity="error",
