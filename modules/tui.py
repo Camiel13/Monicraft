@@ -1,6 +1,7 @@
 import json
 import asyncio
 import websockets
+from rich.markup import escape
 from .mods import Mods
 from .utils import console
 from .players import Players
@@ -19,6 +20,13 @@ class TUI(App):
     TITLE = "Monicraft"
     SUB_TITLE = "Console & Server Monitoring"
     CSS = """
+    Screen {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+    }
+    
     Header {
        height: 3;
        align: center middle;
@@ -186,7 +194,7 @@ class TUI(App):
         
         # Start the background workers
         self.run_worker(self.connect_ws, thread=False)
-        self.run_worker(self.update_server_status, thread=False)
+        self.run_worker(self.data_loop, thread=False)
         
     async def on_unmount(self):
         if self.ws:
@@ -228,7 +236,7 @@ class TUI(App):
                 
                 if data.get("event") == "console output":
                     for i in data.get("args"):
-                        self.console_log.write(i)
+                        self.console_log.write(escape(i))
                         
                 if data.get("event") == "stats":
                     stats = json.loads(data.get("args")[0])
@@ -348,28 +356,29 @@ class TUI(App):
             self.push_screen("players")
             
     async def update_server_status(self):
-        while True:
+        try:
+            self.status_server = await self.server.async_status()
+        except Exception as e:
+            self.status_server = None
+            self.notify(title="Error while pinging server stats",
+                        message=f"An error occurred while pinging the server: {e}",
+                        severity="error",
+                        timeout=10.0
+            )
+        
+        if self.query_enabled:
             try:
-                self.status_server = await self.server.async_status()
-            except Exception as e:
-                self.status_server = None
-                self.notify(title="Error while pinging server stats",
-                            message=f"An error occurred while pinging the server: {e}",
-                            severity="error",
+                self.query_server = await self.server.async_query()
+            except Exception:
+                self.query_enabled = False
+                self.query_server = None
+                self.notify(title="Failed to get query!",
+                            message=f"Failed to get a query from the server. You can turn this on in you server.properties by setting enable-query to true. This may lead to innaccurate player statistics.",
+                            severity="warning",
                             timeout=10.0
-                )
-            
-            if self.query_enabled:
-                try:
-                    self.query_server = await self.server.async_query()
-                except Exception:
-                    self.query_enabled = False
-                    self.query_server = None
-                    self.notify(title="Failed to get query!",
-                                message=f"Failed to get a query from the server. You can turn this on in you server.properties by setting enable-query to true. This may lead to innaccurate player statistics.",
-                                severity="warning",
-                                timeout=10.0
-                    )
-                
-                
+                )            
+    
+    async def data_loop(self):
+        while True:
+            await self.update_server_status()
             await asyncio.sleep(10)

@@ -18,6 +18,10 @@ class Players(Screen):
         width: 100%;
         height: 1fr;
     }
+    #header-buttons {
+        height: auto;
+        dock: top;
+    }
     #footer {
         dock: bottom;
         height: auto;
@@ -26,7 +30,10 @@ class Players(Screen):
     
     def compose(self):
         yield Header(name="Player Manager", show_clock=True)
-        yield Button(label="<", id="back-button")
+        with Horizontal(id="header-buttons"):
+            yield Button(label="<", id="back-button")
+            yield Button(label="↻", id="refresh-button")
+            yield Button(label="Include Offline Players", id="include-offline-button")
         yield DataTable(id="player-table")
         with Horizontal(id="footer"):
             yield Button(label="Stats", id="stats-button")
@@ -41,12 +48,13 @@ class Players(Screen):
         self.table.add_columns("Name", "Health", "Hunger", "XP Level", "Position", "Dimension", "Gamemode")
         
         # Build the table
-        self.run_worker(self.build_table, thread=False)
+        self.run_worker(self.data_loop, thread=False)
         
         for button in self.query(Button):
             button.can_focus = False
             
     async def build_table(self):
+        self.table.clear()
         if self.app.query_server and self.app.query_server.players.list:
             for player in self.app.query_server.players.list:
                 try: 
@@ -69,6 +77,12 @@ class Players(Screen):
         else:
             await asyncio.sleep(5)
             self.build_table()
+            
+    async def data_loop(self):
+        while True:
+            await self.build_table()
+            
+            await asyncio.sleep(10)
                 
     def add_player_to_table(self, nbt_data, name: str):
         health = float(nbt_data["Health"])
@@ -79,20 +93,20 @@ class Players(Screen):
         
         gamemode_number = int(nbt_data["playerGameType"])
         if gamemode_number == 0:
-            gamemode = "survival"
+            gamemode = "Survival"
         elif gamemode_number == 1:
-            gamemode = "creative"
+            gamemode = "Creative"
         elif gamemode_number == 2:
-            gamemode = "adventure"
+            gamemode = "Adventure"
         elif gamemode_number == 3:
-            gamemode = "spectator"
+            gamemode = "Spectator"
         
         self.table.add_row(
             name,
-            str(health),
-            str(hunger),
+            str(round(health, 1)),
+            str(round(hunger, 1)),
             str(xp_level),
-            f"{pos[0]}, {pos[1]}, {pos[2]}",
+            f"{int(pos[0])}, {int(pos[1])}, {int(pos[2])}",
             dimension,
             gamemode
         )
@@ -113,10 +127,19 @@ class Players(Screen):
                 elif event.button.id == "message-button":
                     pass # TODO: ADD POPUP TO SEND A MESSAGE THROUGH THE TELLRAW COMMAND
                 elif event.button.id == "kick-button":
-                    await self.app.send_command(f"kick {player_name}") # TODO: ADD LOGIC TO ADD A REASON
+                    await self.app.send_command(f"/kick {player_name} Kicked by Monicraft!") # TODO: ADD LOGIC TO ADD A REASON
                 elif event.button.id == "ban-button":
-                    await self.app.send_command(f"ban {player_name}") # TODO: ADD LOGIC TO ADD A REASON
+                    await self.app.send_command(f"/ban {player_name}") # TODO: ADD LOGIC TO ADD A REASON
                 elif event.button.id == "gamemode-button":
                     pass # ADD A POPUP TO CHOOSE GAMEMODE
-
-                    
+                
+        if event.button.id == "refresh-button":
+            await self.refresh_data()
+            
+        if event.button.id == "include-offline-button":
+            pass # TODO: ADD LOGIC TO INCLUDE OFFLINE PLAYERS
+            
+    async def refresh_data(self):
+        await self.app.send_command("/save-all")
+        await self.app.update_server_status()
+        await self.build_table()
