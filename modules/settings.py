@@ -72,6 +72,10 @@ class Settings(Screen):
             self.save_creds()
             
         if event.button.id == "reset-button":
+            # Make sure you don't reset your .env while in dummy mode (yeah, this happened to me)
+            if self.app.dummy_server:
+                return
+            
             for input_box in self.query(Input):
                 setattr(self.api, input_box.id, "")
                 set_key(".env", input_box.id.upper(), "")
@@ -83,6 +87,10 @@ class Settings(Screen):
             self.update_inputs()
             
     def save_creds(self):
+        # Make sure the dummy details don't get saved to the .env (yup, this also happened to me)
+        if self.app.dummy_server:
+            return
+        
         for input_box in self.query(Input):
             if hasattr(self.api, input_box.id):
                 setattr(self.api, input_box.id, input_box.value)

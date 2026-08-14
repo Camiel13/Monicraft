@@ -1,6 +1,7 @@
 import io
 import os
 import nbtlib
+import random
 import hashlib
 import requests
 import gzip
@@ -113,3 +114,45 @@ class API:
                         title="Failed to get user data!",
                         message=f"An error occured while getting the user data: {response.status_code}, {response.text}")
             return None
+        
+class DummyAPI:
+    def __init__(self):
+        self.server_id = "131313"
+        self.panel_endpoint = "panel.doesnotexist.com"
+        self.api_key = "ptlc_On32iooISJSNnoj3oFJn5ONinfe3noJ5n34om55" # not a real api key, silly
+        self.headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Accept": "application/json"
+        }
+        
+    @property
+    def url(self):
+        return f"https://{self.panel_endpoint}/api/client/servers/{self.server_id}"
+    
+    def get_dummy_player_data(self):
+        dimensions = ["minecraft:overworld", "minecraft:the_nether", "minecraft:end"]
+        nbt_data = {
+            "Health": random.uniform(10.0, 20.0),
+            "foodLevel": random.uniform(10.0, 20.0),
+            "XpLevel": random.randint(0, 50),
+            "Pos": [random.uniform(0.0, 10000.0) for i in range(3)],
+            "Dimension": random.choice(dimensions),
+            "playerGameType": 0
+        }
+        players = [
+            "Steve",
+            "Alex",
+            "Noor",
+            "Sunny",
+            "Ari",
+            "Zuri",
+            "Makena",
+            "Kai",
+            "Efe"
+        ]
+        player_name = f"{random.choice(players)}{str(random.randint(11, 99))}"
+        
+        return player_name, nbt_data
+        
+    def get_mods(self):
+        return []

@@ -1,4 +1,5 @@
 import json
+import random
 import asyncio
 import websockets
 from rich.markup import escape
@@ -150,6 +151,8 @@ class TUI(App):
         self.query_enabled = True
         self.status_server = None
         self.query_server = None
+        self.dummy_server = True if self.api.__class__.__name__ == "DummyAPI" else False
+            
     
     def compose(self):
         yield Header(show_clock=True, name="Monicraft", icon="")
@@ -173,10 +176,15 @@ class TUI(App):
                     yield Button(label="✉", id="chat-mode-button")
                     yield Input(id="console-input", placeholder="Type a minecraft command to send it to the server...")
                     
-    async def on_mount(self):
-        # Get the server address
-        self.server_ip, self.server_port = self.api.get_server_address()
-        self.server = JavaServer.lookup(f"{self.server_ip}:{self.server_port}")        
+    async def on_mount(self):        
+        # Get the server address and set the title
+        if self.dummy_server:
+           self.title = "Monicraft (dummy)"
+           self.sub_title = "Dummy Server"
+        else:   
+            self.server_ip, self.server_port = self.api.get_server_address()
+            self.server = JavaServer.lookup(f"{self.server_ip}:{self.server_port}")
+            self.title = "Monicraft"
         
         # Define the elements as variables for easy access
         self.console_log = self.query_one("#console-log", RichLog)
@@ -201,33 +209,41 @@ class TUI(App):
             self.ws.close()
         
     async def connect_ws(self):
-        try:
-            token, socket_url = self.api.get_websocket_creds()
-            origin = f"https://{self.api.panel_endpoint}"
-                    
-            self.ws = await websockets.connect(socket_url, origin=origin)
-            
-            auth_message = {
-                "event": "auth",
-                "args": [token]
-            }
-            
-            await self.ws.send(json.dumps(auth_message))
-            
-            self.run_worker(self.stream_data, thread=False)
-            
-            self.console_log.write("[green]Succesfully connected to the server![/]")
-            return True
-        except Exception as e:
-            self.console_log.write(f"[bold red]Couldn't connect to the server: {e}[/]")
-            self.notify(title="Couldn't connect to server!",
-                        message=f"Server connection could not be established: {e}",
-                        severity="error",
-                        timeout=10.0
-            )
-            
-            # Wait 5 seconds until next try
-            await asyncio.sleep(5)
+        if self.dummy_server:
+            self.ws = None
+            self.run_worker(self.stream_dummy_data, thread=False)
+            self.console_log.write("[green]Succesfully connected to the dummy server![/]")
+            return
+
+        while True:
+            try:
+                token, socket_url = self.api.get_websocket_creds()
+                origin = f"https://{self.api.panel_endpoint}"
+                        
+                self.ws = await websockets.connect(socket_url, origin=origin)
+                
+                auth_message = {
+                    "event": "auth",
+                    "args": [token]
+                }
+                
+                await self.ws.send(json.dumps(auth_message))
+                
+                self.run_worker(self.stream_data, thread=False)
+                
+                self.console_log.write("[green]Succesfully connected to the server![/]")
+                
+                return
+            except Exception as e:
+                self.console_log.write(f"[bold red]Couldn't connect to the server: {e}[/]")
+                self.notify(title="Couldn't connect to server!",
+                            message=f"Server connection could not be established: {e}",
+                            severity="error",
+                            timeout=3.0
+                )
+                
+                # Wait 5 seconds until next try
+                await asyncio.sleep(5)
     
     async def stream_data(self):        
         try:   
@@ -264,6 +280,10 @@ class TUI(App):
             self.run_worker(self.connect_ws, thread=False)
                         
     async def send_command(self, command: str):
+        if self.dummy_server:
+            self.console_log.write(f"Sent command to dummy server: [bold blue]{command}[/]")
+            return
+        
         if not self.ws:
             await self.connect_ws()
             
@@ -286,7 +306,8 @@ class TUI(App):
             )
             
     async def send_power_action(self, action: str):
-        if action not in ["restart", "start", "stop", "kill"]:
+        if self.dummy_server:
+            self.console_log.write(f"Power action sent to dummy server: [bold blue]{action}[/]")
             return
         
         if not self.ws:
@@ -356,8 +377,27 @@ class TUI(App):
             self.push_screen("players")
             
     async def update_server_status(self):
+        if self.dummy_server:
+            return
+                
+        # Check if server has queries enabled, if not, use status
+        if self.query_enabled:
+            try:
+                self.query_server = await self.server.async_query()
+                self.sub_title = f"{self.server_ip}:{self.server_port} (Minecraft {self.query_server.software.version})"
+                #return
+            except Exception:
+                self.query_enabled = False
+                self.query_server = None
+                self.notify(title="Failed to get query!",
+                            message=f"Failed to get a query from the server. You can turn this on in your server.properties by setting enable-query to true. Leaving this off may lead to inaccurate player statistics.",
+                            severity="warning",
+                            timeout=10.0
+                )     
+              
         try:
             self.status_server = await self.server.async_status()
+            self.sub_title = f"{self.server_ip}:{self.server_port} (Minecraft {self.status_server.version.name})"
         except Exception as e:
             self.status_server = None
             self.notify(title="Error while pinging server stats",
@@ -365,20 +405,35 @@ class TUI(App):
                         severity="error",
                         timeout=10.0
             )
-        
-        if self.query_enabled:
-            try:
-                self.query_server = await self.server.async_query()
-            except Exception:
-                self.query_enabled = False
-                self.query_server = None
-                self.notify(title="Failed to get query!",
-                            message=f"Failed to get a query from the server. You can turn this on in you server.properties by setting enable-query to true. This may lead to innaccurate player statistics.",
-                            severity="warning",
-                            timeout=10.0
-                )            
+
     
     async def data_loop(self):
         while True:
             await self.update_server_status()
             await asyncio.sleep(10)
+            
+    async def stream_dummy_data(self):
+        try:
+            while True:   
+                server_status = "running"
+                server_status_color = "bold green" if server_status == "running" else "bold red"
+                ram_usage =  random.uniform(1.5, 10.0)
+                ram_limit =  10.0
+                cpu_percent = random.uniform(0.5, 100.0)
+                
+                self.server_status.update(f"Server status: [{server_status_color}]{server_status}[/]")
+                self.ram_usage.update(f"RAM: [green]{ram_usage:.2f}[/]/[green]{ram_limit:.2f}[/] GB")
+                self.cpu_usage.update(f"CPU: {cpu_percent:.2f}%")
+                
+                await asyncio.sleep(2)
+            
+        except Exception as e:
+            self.console_log.write(f"[bold red]Server connection lost: {e}[/]")
+            self.notify(title="Server Connection error",
+                        message=f"Server connection lost: {e}",
+                        severity="error",
+                        timeout=10.0
+                        )
+            
+            # Try reconnecting, this will loop every 5 seconds if creds are wrong.
+            self.run_worker(self.connect_ws, thread=False)

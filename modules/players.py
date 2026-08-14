@@ -2,6 +2,7 @@ import nbtlib
 import asyncio
 from textual.screen import Screen
 from textual.containers import Horizontal, Vertical
+from .popup import GamemodePopUp, MessagePopUp, KickBanPopUp
 from textual.widgets import Header, Input, Label, Button, DataTable
 
 class Players(Screen):
@@ -55,6 +56,12 @@ class Players(Screen):
             
     async def build_table(self):
         self.table.clear()
+        
+        if self.app.dummy_server:
+            player_name, nbt_data = self.app.api.get_dummy_player_data()
+            self.add_player_to_table(nbt_data=nbt_data, name=player_name)
+            return
+            
         if self.app.query_server and self.app.query_server.players.list:
             for player in self.app.query_server.players.list:
                 try: 
@@ -121,17 +128,22 @@ class Players(Screen):
                 row_data = self.table.get_row_at(selected_row)
                 
                 player_name = row_data[0]
+                gamemode = row_data[6]
                 
                 if event.button.id == "stats-button":
                     pass # TODO: ADD LOGIC TO SHOW STATS FROM FILES
                 elif event.button.id == "message-button":
-                    pass # TODO: ADD POPUP TO SEND A MESSAGE THROUGH THE TELLRAW COMMAND
+                    self.app.push_screen(MessagePopUp(player_name=player_name))
                 elif event.button.id == "kick-button":
-                    await self.app.send_command(f"/kick {player_name} Kicked by Monicraft!") # TODO: ADD LOGIC TO ADD A REASON
+                    self.app.push_screen(KickBanPopUp(player_name=player_name, action="kick"))
                 elif event.button.id == "ban-button":
-                    await self.app.send_command(f"/ban {player_name}") # TODO: ADD LOGIC TO ADD A REASON
+                    self.app.push_screen(KickBanPopUp(player_name=player_name, action="ban"))
                 elif event.button.id == "gamemode-button":
-                    pass # ADD A POPUP TO CHOOSE GAMEMODE
+                    async def on_popup_close(changed: bool):
+                        if changed:
+                            await self.refresh_data()
+                    
+                    self.app.push_screen(GamemodePopUp(player_name=player_name, current_gamemode=gamemode), on_popup_close)
                 
         if event.button.id == "refresh-button":
             await self.refresh_data()
@@ -141,5 +153,6 @@ class Players(Screen):
             
     async def refresh_data(self):
         await self.app.send_command("/save-all")
+        await asyncio.sleep(0.5)
         await self.app.update_server_status()
         await self.build_table()
