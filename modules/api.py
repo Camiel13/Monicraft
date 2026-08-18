@@ -80,7 +80,7 @@ class API:
             ip, port = alloc["ip"], alloc["port"]
             return ip, port
         else:
-            self.notify(severity="error",
+            self.app.notify(severity="error",
                         title="Failed to get server address!",
                         message=f"An error occured while getting the address: {response.status_code}, {response.text}")
             return None, None
@@ -104,7 +104,7 @@ class API:
             uuid = next(item["uuid"] for item in usercache if item["name"] == name)
             return uuid
         else:
-            self.notify(severity="error",
+            self.app.notify(severity="error",
                         title="Failed to get user cache!",
                         message=f"An error occured while getting the user cache: {response.status_code}, {response.text}")
             return None
@@ -125,7 +125,7 @@ class API:
                 nbt_data = nbtlib.File.from_fileobj(gz)
             return nbt_data
         else:
-            self.notify(severity="error",
+            self.app.notify(severity="error",
                         title="Failed to get user data!",
                         message=f"An error occured while getting the user data: {response.status_code}, {response.text}")
             return None
@@ -155,6 +155,10 @@ class DummyAPI:
     @property
     def url(self):
         return f"https://{self.panel_endpoint}/api/client/servers/{self.server_id}"
+    
+    @property
+    def is_configured(self):
+        return True
     
     def get_dummy_player_data(self):
         dimensions = ["minecraft:overworld", "minecraft:the_nether", "minecraft:end"]

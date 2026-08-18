@@ -105,4 +105,4 @@ class Settings(Screen):
     def update_inputs(self):
         for input_box in self.query(Input):
             if hasattr(self.api, input_box.id):
-                input_box.value = getattr(self.api, input_box.id)
+                input_box.value = getattr(self.api, input_box.id) or ""
