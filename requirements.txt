@@ -1,4 +1,7 @@
-textual
+rich
+httpx
 nbtlib
-requests
+textual
 mcstatus
+websockets
+python-dotenv

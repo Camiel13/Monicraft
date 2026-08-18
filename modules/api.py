@@ -3,9 +3,8 @@ import os
 import nbtlib
 import random
 import hashlib
-import requests
+import httpx
 import gzip
-from .utils import console
 from dotenv import load_dotenv, set_key
 
 class API:
@@ -14,17 +13,30 @@ class API:
         self.server_id = os.getenv("SERVER_ID")
         self.panel_endpoint = os.getenv("PANEL_ENDPOINT")
         self.api_key = os.getenv("API_KEY")
-        self.headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Accept": "application/json"
-        }
+        self.uuid_cache = {} # will contain {"Steve": "owijfgwkjnefkjnrgoenrgijnekjnge"}
+        
+        self.init_client()
         
     @property
     def url(self):
         return f"https://{self.panel_endpoint}/api/client/servers/{self.server_id}"
+    
+    @property
+    def is_configured(self):
+        return bool(self.api_key and self.server_id and self.panel_endpoint)
+    
+    def init_client(self):
+        self.headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Accept": "application/json"
+        }
+        self.client = httpx.AsyncClient(headers=self.headers, timeout=3.0)
 
-    def get_websocket_creds(self):
-        response = requests.get(url=f"{self.url}/websocket", headers=self.headers)
+    async def get_websocket_creds(self):
+        response = await self.client.get(
+            url=f"{self.url}/websocket",
+            
+        )
 
         data = response.json()["data"]
         token = data["token"]
@@ -32,10 +44,9 @@ class API:
         
         return token, socket_url
   
-    def get_mods(self):
-        response = requests.get(
+    async def get_mods(self):
+        response = await self.client.get(
             url=f"{self.url}/files/list",
-            headers=self.headers,
             params={"directory": "/mods"}
         )
         
@@ -44,10 +55,9 @@ class API:
             return data["data"]
 
     """    
-    def get_versions(self):
-        response = requests.get(
+    async def get_versions(self):
+        response = await self.client.get(
             url=f"{self.url}/startup",
-            headers=self.headers,
         )
         
         if response.status_code == 200:
@@ -59,10 +69,9 @@ class API:
             return
     """
     
-    def get_server_address(self):
-        response = requests.get(
+    async def get_server_address(self):
+        response = await self.client.get(
             url=f"{self.url}/network/allocations",
-            headers = self.headers
         )
 
         if response.status_code == 200:
@@ -76,15 +85,22 @@ class API:
                         message=f"An error occured while getting the address: {response.status_code}, {response.text}")
             return None, None
     
-    def get_player_uuid(self, name: str) -> str:
-        response = requests.get(
+    async def get_player_uuid(self, name: str) -> str:
+        if name in self.uuid_cache.keys():
+            return self.uuid_cache[name]
+        
+        response = await self.client.get(
             url=f"{self.url}/files/contents",
-            headers=self.headers,
             params={"file": "usercache.json"}
         )
         
         if response.status_code == 200:
             usercache = response.json()
+            # Cache all the users in usercache.json
+            for item in usercache:
+                self.uuid_cache[item["name"]] = item["uuid"]
+            
+            # Get the uuid for the given name
             uuid = next(item["uuid"] for item in usercache if item["name"] == name)
             return uuid
         else:
@@ -94,13 +110,12 @@ class API:
             return None
 
         
-    def get_player_data(self, name=None, uuid=None) -> object:
-        if not uuid:
-            uuid = self.get_player_uuid(name)
+    async def get_player_data(self, name=None, uuid=None) -> object:
+        if not uuid:            
+            uuid = await self.get_player_uuid(name)
         
-        response = requests.get(
+        response = await self.client.get(
             url=f"{self.url}/files/contents",
-            headers=self.headers,
             params={"file": f"world/playerdata/{uuid}.dat"}
         )
         
@@ -114,6 +129,18 @@ class API:
                         title="Failed to get user data!",
                         message=f"An error occured while getting the user data: {response.status_code}, {response.text}")
             return None
+        
+    async def get_stats(self, uuid: str):
+        response = await self.client.get(
+            url=f"{self.url}/files/contents",
+            params={"file": f"world/stats/{uuid}.json"}
+        )
+        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            return None
+        
         
 class DummyAPI:
     def __init__(self):
@@ -154,5 +181,5 @@ class DummyAPI:
         
         return player_name, nbt_data
         
-    def get_mods(self):
+    async def get_mods(self):
         return []

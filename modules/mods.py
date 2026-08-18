@@ -30,10 +30,10 @@ class Mods(Screen):
         yield Button(label="<", id="back-button")
         yield DataTable(id="mods-table")
         
-    def on_mount(self):
+    async def on_mount(self):
         self.table = self.query_one("#mods-table")
         self.table.add_columns("Mod", "Size (MB)", "Last changed on")
-        self.build_table()
+        await self.build_table()
         
         for button in self.query(Button):
             button.can_focus = False
@@ -42,8 +42,10 @@ class Mods(Screen):
         if event.button.id == "back-button":
             self.dismiss()
             
-    def build_table(self):
-        mods_data = self.api.get_mods()
+    async def build_table(self):
+        mods_data = await self.api.get_mods()
+        if not mods_data:
+            return
         
         for mod in mods_data:
             attr = mod["attributes"]

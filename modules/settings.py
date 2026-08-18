@@ -52,7 +52,7 @@ class Settings(Screen):
             yield Input(placeholder="e.g. panel.camilio13.com", id="panel_endpoint")
         with Vertical(classes="creds-box"):
             yield Label("[bold green]Server ID[/]")
-            yield Input(placeholder="e.g. panel.camilio13.com/server/[bold blue]937284kf[/]", id="server_id")
+            yield Input(placeholder="e.g. panel.camilio13.com/server/937284kf", id="server_id")
         with Horizontal(id="button-bar"):
             yield Button(label="Save", id="save-button")
             yield Button(label="Reset", id="reset-button")
@@ -95,6 +95,8 @@ class Settings(Screen):
             if hasattr(self.api, input_box.id):
                 setattr(self.api, input_box.id, input_box.value)
                 set_key(".env", input_box.id.upper(), input_box.value)
+                
+        self.api.init_client()
         
         self.notify(severity="information",
                     title="Saved changes!",
@@ -104,5 +106,3 @@ class Settings(Screen):
         for input_box in self.query(Input):
             if hasattr(self.api, input_box.id):
                 input_box.value = getattr(self.api, input_box.id)
-        
-        

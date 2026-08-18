@@ -1,3 +1,4 @@
 .env
 venv/
 __pycache__/
+camilio13_stats.json

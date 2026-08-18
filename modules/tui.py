@@ -13,6 +13,7 @@ from textual.containers import Horizontal, Vertical
 from textual.widgets import Header, RichLog, Input, Label, Button
 
 class TUI(App):
+    AUTO_FOCUS="#console-input"
     SCREENS = {
         "settings": Settings,
         "mods": Mods,
@@ -152,7 +153,6 @@ class TUI(App):
         self.status_server = None
         self.query_server = None
         self.dummy_server = True if self.api.__class__.__name__ == "DummyAPI" else False
-            
     
     def compose(self):
         yield Header(show_clock=True, name="Monicraft", icon="")
@@ -181,11 +181,7 @@ class TUI(App):
         if self.dummy_server:
            self.title = "Monicraft (dummy)"
            self.sub_title = "Dummy Server"
-        else:   
-            self.server_ip, self.server_port = self.api.get_server_address()
-            self.server = JavaServer.lookup(f"{self.server_ip}:{self.server_port}")
-            self.title = "Monicraft"
-        
+
         # Define the elements as variables for easy access
         self.console_log = self.query_one("#console-log", RichLog)
         self.console_input = self.query_one("#console-input", Input)
@@ -197,16 +193,20 @@ class TUI(App):
         for button in self.query(Button):
             button.can_focus = False
         
-        # Put the cursor in the console input
-        self.console_input.focus()
-        
         # Start the background workers
+        if not self.api.is_configured:
+            self.notify(severity="warning",
+                        title="Credentials not filled in.",
+                        message="You've not filled in your server's credentials yet, you can do this manually in the .env file or simply fill them in in the settings menu.",
+                        timeout=15
+            )
+        
         self.run_worker(self.connect_ws, thread=False)
         self.run_worker(self.data_loop, thread=False)
         
     async def on_unmount(self):
         if self.ws:
-            self.ws.close()
+            await self.ws.close()
         
     async def connect_ws(self):
         if self.dummy_server:
@@ -217,7 +217,7 @@ class TUI(App):
 
         while True:
             try:
-                token, socket_url = self.api.get_websocket_creds()
+                token, socket_url = await self.api.get_websocket_creds()
                 origin = f"https://{self.api.panel_endpoint}"
                         
                 self.ws = await websockets.connect(socket_url, origin=origin)
@@ -235,11 +235,10 @@ class TUI(App):
                 
                 return
             except Exception as e:
-                self.console_log.write(f"[bold red]Couldn't connect to the server: {e}[/]")
                 self.notify(title="Couldn't connect to server!",
-                            message=f"Server connection could not be established: {e}",
+                            message=f"Server connection could not be established. Retrying in 5 seconds...",
                             severity="error",
-                            timeout=3.0
+                            timeout=6.0
                 )
                 
                 # Wait 5 seconds until next try
@@ -278,6 +277,16 @@ class TUI(App):
             
             # Try reconnecting, this will loop every 5 seconds if creds are wrong.
             self.run_worker(self.connect_ws, thread=False)
+            
+    async def find_server(self):
+        self.server_ip, self.server_port = await self.api.get_server_address()
+        if self.server_ip and self.server_port:
+            self.server = JavaServer.lookup(f"{self.server_ip}:{self.server_port}")
+        else:
+            self.notify(severity="error",
+                        title="Failed to get server ip or port!",
+                        message="There was a problem while getting the server port and ip form the server."
+            )
                         
     async def send_command(self, command: str):
         if self.dummy_server:
@@ -385,7 +394,7 @@ class TUI(App):
             try:
                 self.query_server = await self.server.async_query()
                 self.sub_title = f"{self.server_ip}:{self.server_port} (Minecraft {self.query_server.software.version})"
-                #return
+                return
             except Exception:
                 self.query_enabled = False
                 self.query_server = None
@@ -409,7 +418,11 @@ class TUI(App):
     
     async def data_loop(self):
         while True:
-            await self.update_server_status()
+            if self.api.is_configured:
+                if not hasattr(self, "server") or self.server is None:
+                    await self.find_server()
+                else:                    
+                    await self.update_server_status()
             await asyncio.sleep(10)
             
     async def stream_dummy_data(self):

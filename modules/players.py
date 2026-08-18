@@ -2,8 +2,8 @@ import nbtlib
 import asyncio
 from textual.screen import Screen
 from textual.containers import Horizontal, Vertical
-from .popup import GamemodePopUp, MessagePopUp, KickBanPopUp
 from textual.widgets import Header, Input, Label, Button, DataTable
+from .popup import GamemodePopUp, MessagePopUp, KickBanPopUp, StatsPopUp
 
 class Players(Screen):
     AUTO_FOCUS="#player-table"
@@ -65,8 +65,8 @@ class Players(Screen):
         if self.app.query_server and self.app.query_server.players.list:
             for player in self.app.query_server.players.list:
                 try: 
-                    player_uuid = self.app.api.get_player_uuid(name=player)
-                    nbt_data = self.app.api.get_player_data(uuid=player_uuid)
+                    player_uuid = await self.app.api.get_player_uuid(name=player)
+                    nbt_data = await self.app.api.get_player_data(uuid=player_uuid)
                     self.add_player_to_table(nbt_data, player)
                 except Exception as e:
                     self.notify(severity="error",
@@ -75,20 +75,16 @@ class Players(Screen):
         elif self.app.status_server and self.app.status_server.players.sample:
             try:
                 for player in self.app.status_server.players.sample:
-                    nbt_data = self.app.api.get_player_data(uuid=player.id)
+                    nbt_data = await self.app.api.get_player_data(uuid=player.id)
                     self.add_player_to_table(nbt_data, player.name)
             except Exception as e:
                 self.notify(severity="error",
                             title="Failed to get players through ping!",
                             message=f"Failed to get players through ping: {e}.")
-        else:
-            await asyncio.sleep(5)
-            self.build_table()
-            
+
     async def data_loop(self):
         while True:
             await self.build_table()
-            
             await asyncio.sleep(10)
                 
     def add_player_to_table(self, nbt_data, name: str):
@@ -131,7 +127,7 @@ class Players(Screen):
                 gamemode = row_data[6]
                 
                 if event.button.id == "stats-button":
-                    pass # TODO: ADD LOGIC TO SHOW STATS FROM FILES
+                    self.app.push_screen(StatsPopUp(player_name="Camilio13"))
                 elif event.button.id == "message-button":
                     self.app.push_screen(MessagePopUp(player_name=player_name))
                 elif event.button.id == "kick-button":
