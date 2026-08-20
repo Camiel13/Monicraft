@@ -87,8 +87,8 @@ class API:
             return None, None
     
     async def get_player_uuid(self, name: str) -> str:
-        if name in self.uuid_cache.keys():
-            return self.uuid_cache[name]
+        if name.lower() in self.uuid_cache.keys():
+            return self.uuid_cache[name.lower()]
         
         response = await self.client.get(
             url=f"{self.url}/files/contents",
@@ -99,10 +99,10 @@ class API:
             usercache = response.json()
             # Cache all the users in usercache.json
             for item in usercache:
-                self.uuid_cache[item["name"]] = item["uuid"]
+                self.uuid_cache[item["name"].lower()] = item["uuid"]
             
             # Get the uuid for the given name
-            uuid = next(item["uuid"] for item in usercache if item["name"] == name)
+            uuid = self.uuid_cache.get(name)
             return uuid
         else:
             self.app.notify(severity="error",
@@ -110,12 +110,14 @@ class API:
                             message=f"An error occured while getting the user cache: {response.status_code}, {response.text}"
             )
             return None
+        
+    async def get_player_data(self, uuid=None, name=None) -> object:        
+        if not uuid and not name:
+            return
+        
+        if not uuid:
+            uuid = await self.get_player_uuid(name=name)
 
-        
-    async def get_player_data(self, name=None, uuid=None) -> object:
-        if not uuid:            
-            uuid = await self.get_player_uuid(name)
-        
         response = await self.client.get(
             url=f"{self.url}/files/contents",
             params={"file": f"world/playerdata/{uuid}.dat"}
@@ -147,6 +149,30 @@ class API:
                             message=f"An error occured while getting the user data: {response.status_code}, {response.text}"
             )
             return None
+        
+    async def get_recent_players(self):
+        response = await self.client.get(
+            url=f"{self.url}/files/contents",
+            params={"file": "usercache.json"}
+        )
+        
+        if response.status_code == 200:
+            usercache = response.json()
+            # Cache all the users in usercache.json
+            for item in usercache:
+                self.uuid_cache[item["name"].lower()] = item["uuid"]
+            
+            data = [{"name": item["name"], "uuid": item["uuid"]} for item in usercache]
+
+            return data
+        else:
+            self.app.notify(severity="error",
+                            title="Failed to get user cache!",
+                            message=f"An error occured while getting the user cache: {response.status_code}, {response.text}"
+            )
+            return None
+        
+    
         
         
 class DummyAPI:

@@ -18,6 +18,7 @@ class Mods(Screen):
     #mods-table {
         width: 100%;
         height: 1fr;
+        padding: 1 2;
     }
     """
     

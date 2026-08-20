@@ -16,14 +16,20 @@ class Players(Screen):
         min-width: 8;
         content-align: center middle;
     }
+    #include-offline-button.on {
+        background: green;
+    }
+    
     #player-table {
         width: 100%;
         height: 1fr;
     }
+    
     #header-buttons {
         height: auto;
         dock: top;
     }
+    
     #footer {
         dock: bottom;
         height: auto;
@@ -34,7 +40,7 @@ class Players(Screen):
         yield Header(name="Player Manager", show_clock=True)
         with Horizontal(id="header-buttons"):
             yield Button(label="<", id="back-button")
-            yield Button(label="↻", id="refresh-button")
+            yield Button(label="↻\uFE0E", id="refresh-button")
             yield Button(label="Include Offline Players", id="include-offline-button")
         yield DataTable(id="player-table")
         with Horizontal(id="footer"):
@@ -46,49 +52,78 @@ class Players(Screen):
             
     
     async def on_mount(self):
+        # Create the toggle and cache for offline players
+        self.offline_included = False
+        self.offline_player_cache = {}
+        
+        # Making the table with the right columns
         self.table = self.query_one("#player-table")
-        self.table.add_columns("Name", "Health", "Hunger", "XP Level", "Position", "Dimension", "Gamemode")
+        self.table.add_columns("Name", "Status", "Health", "Hunger", "XP Level", "Position", "Dimension", "Gamemode")
         
         # Build the table
         self.run_worker(self.data_loop, thread=False)
         
+        # Make the buttons not focusable
         for button in self.query(Button):
             button.can_focus = False
+    
+    async def get_online_player_names(self):
+        if self.app.query_server and self.app.query_server.players.list:
+            return set(self.app.query_server.players.list)
+        elif self.app.status_server and self.app.status_server.players.sample:
+            return {player.name for player in self.app.status_server.players.sample}
+        return set()
             
     async def build_table(self):
-        self.table.clear()
-        
         if self.app.dummy_server:
             player_name, nbt_data = self.app.api.get_dummy_player_data()
-            self.add_player_to_table(nbt_data=nbt_data, name=player_name)
+            self.table.clear()
+            self.add_player_to_table(nbt_data=nbt_data, name=player_name, is_online=True)
             return
             
-        if self.app.query_server and self.app.query_server.players.list:
-            for player in self.app.query_server.players.list:
-                try: 
-                    player_uuid = await self.app.api.get_player_uuid(name=player)
-                    nbt_data = await self.app.api.get_player_data(uuid=player_uuid)
-                    self.add_player_to_table(nbt_data, player)
-                except Exception as e:
-                    self.notify(severity="error",
-                                title="Failed to get players through query!",
-                                message=f"Failed to get players through query: {e}.")
-        elif self.app.status_server and self.app.status_server.players.sample:
-            try:
-                for player in self.app.status_server.players.sample:
-                    nbt_data = await self.app.api.get_player_data(uuid=player.id)
-                    self.add_player_to_table(nbt_data, player.name)
-            except Exception as e:
-                self.notify(severity="error",
-                            title="Failed to get players through ping!",
-                            message=f"Failed to get players through ping: {e}.")
+        try:
+            # Get all the online players as a set
+            online_names = await self.get_online_player_names()
+            
+            # Build the dictionary with all the players (online or offline)
+            if self.offline_included:
+                cached_players = await self.app.api.get_recent_players()
+                players_to_load = cached_players or []
+            else:
+                players_to_load = [{"name": name, "uuid": None} for name in online_names]
+            
+            # Get the NBT data for all the players
+            tasks = [self.app.api.get_player_data(name=player["name"], uuid=player["uuid"]) for player in players_to_load]
+            nbt_data_list = await asyncio.gather(*tasks)
+            
+            # Clear the table after the requests
+            self.table.clear()
+            
+            player_entries = []
+            for player, nbt in zip(players_to_load, nbt_data_list):
+                name = player["name"]
+                is_online = name in online_names
+                player_entries.append((name, nbt, is_online))
+                
+            player_entries.sort(key=lambda x: not x[2])
+            for name, nbt, is_online in player_entries:
+                self.add_player_to_table(name=name, nbt_data=nbt, is_online=is_online)
+        except Exception as e:
+            self.notify(severity="error",
+                        title="Failed to build the table!",
+                        message=f"Failed to build the table: {e}.")        
+        
 
     async def data_loop(self):
         while True:
             await self.build_table()
             await asyncio.sleep(10)
                 
-    def add_player_to_table(self, nbt_data, name: str):
+    def add_player_to_table(self, name: str, nbt_data, is_online: bool):
+        if not nbt_data:
+            self.table.add_row(name, "?", "?", "?", "?", "?", "?", "?")
+            return
+        
         health = float(nbt_data["Health"])
         hunger = int(nbt_data['foodLevel'])
         xp_level = int(nbt_data['XpLevel'])
@@ -104,9 +139,12 @@ class Players(Screen):
             gamemode = "Adventure"
         elif gamemode_number == 3:
             gamemode = "Spectator"
+            
+        status = "Online" if is_online else "Offline"
         
         self.table.add_row(
             name,
+            status,
             str(round(health, 1)),
             str(round(hunger, 1)),
             str(xp_level),
@@ -125,29 +163,58 @@ class Players(Screen):
                 row_data = self.table.get_row_at(selected_row)
                 
                 player_name = row_data[0]
-                gamemode = row_data[6]
+                gamemode = row_data[7]
+                online = True if row_data[1] == "Online" else False
                 
                 if event.button.id == "stats-button":
                     self.app.push_screen(StatsPopUp(player_name=player_name))
                 elif event.button.id == "message-button":
-                    self.app.push_screen(MessagePopUp(player_name=player_name))
+                    if online:
+                        self.app.push_screen(MessagePopUp(player_name=player_name))
+                    else:
+                        self.notify(severity="error",
+                                    title="You can't message an offline player!",
+                                    message=f"You're not able to message a player when they're not online.",
+                                    timeout=3.0            
+                        )     
                 elif event.button.id == "kick-button":
-                    self.app.push_screen(KickBanPopUp(player_name=player_name, action="kick"))
+                    if online:
+                        self.app.push_screen(KickBanPopUp(player_name=player_name, action="kick"))
+                    else:
+                        self.notify(severity="error",
+                                        title="You can't kick an offline player!",
+                                        message=f"You're not able to kick a player when they're not online.",
+                                        timeout=3.0            
+                        )       
                 elif event.button.id == "ban-button":
                     self.app.push_screen(KickBanPopUp(player_name=player_name, action="ban"))
                 elif event.button.id == "gamemode-button":
-                    async def on_popup_close(changed: bool):
-                        if changed:
-                            await self.refresh_data()
-                    
-                    self.app.push_screen(GamemodePopUp(player_name=player_name, current_gamemode=gamemode), on_popup_close)
+                    if online:
+                        async def on_popup_close(changed: bool):
+                            if changed:
+                                await self.refresh_data()
+                        
+                        self.app.push_screen(GamemodePopUp(player_name=player_name, current_gamemode=gamemode), on_popup_close)
+                    else:
+                        self.notify(severity="error",
+                                    title="You can't change gamemode for an offline player!",
+                                    message=f"You're not able to change the gamemode of a player when they're not online.",
+                                    timeout=3.0            
+                        )  
                 
         if event.button.id == "refresh-button":
             await self.refresh_data()
             
         if event.button.id == "include-offline-button":
-            pass # TODO: ADD LOGIC TO INCLUDE OFFLINE PLAYERS
+            self.offline_included = not self.offline_included
             
+            if self.offline_included:
+                event.button.add_class("on")
+            else:
+                event.button.remove_class("on")
+            
+            await self.build_table()
+                
     async def refresh_data(self):
         await self.app.send_command("/save-all")
         await asyncio.sleep(0.5)

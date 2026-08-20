@@ -152,6 +152,7 @@ class TUI(App):
         self.query_enabled = True
         self.status_server = None
         self.query_server = None
+        self.server_state = None
         self.dummy_server = True if self.api.__class__.__name__ == "DummyAPI" else False
         self.api.app = self
     
@@ -160,21 +161,21 @@ class TUI(App):
         with Horizontal(id="body"):
             with Vertical(id="sidebar"):
                 with Horizontal(id="power-buttons"):
-                    yield Button("▶", id="start-button", classes="power-button")
-                    yield Button("↻", id="restart-button", classes="power-button")
-                    yield Button("■", id="stop-button", classes="power-button")
-                    yield Button("☠", id="kill-button", classes="power-button")
+                    yield Button("▶\uFE0E", id="start-button", classes="power-button")
+                    yield Button("↻\uFE0E", id="restart-button", classes="power-button")
+                    yield Button("■\uFE0E", id="stop-button", classes="power-button")
+                    yield Button("☠\uFE0E", id="kill-button", classes="power-button")
                 yield Label("Connecting to server...", classes="stats", id="server-status")
                 yield Label("Connecting to server...", classes="stats", id="ram-usage")
                 yield Label("Connecting to server...", classes="stats", id="cpu-usage")
                 with Horizontal(id="nav-buttons"):
-                    yield Button(label="⚙", id="settings-button", classes="nav-button")
-                    yield Button(label="⚒", id="mods-button", classes="nav-button")
-                    yield Button(label="☺", id="players-button", classes="nav-button")
+                    yield Button(label="⚙\uFE0E", id="settings-button", classes="nav-button")
+                    yield Button(label="⚒\uFE0E", id="mods-button", classes="nav-button")
+                    yield Button(label="☺\uFE0E", id="players-button", classes="nav-button")
             with Vertical(id="console"):
                 yield RichLog(id="console-log", highlight=True, markup=True)
                 with Horizontal(id="input-box"):
-                    yield Button(label="✉", id="chat-mode-button")
+                    yield Button(label="✉\uFE0E", id="chat-mode-button")
                     yield Input(id="console-input", placeholder="Type a minecraft command to send it to the server...")
                     
     async def on_mount(self):        
@@ -258,6 +259,7 @@ class TUI(App):
                     stats = json.loads(data.get("args")[0])
                     
                     server_status = stats.get("state")
+                    self.server_state = server_status
                     server_status_color = "bold green" if server_status == "running" else "bold red"
                     ram_usage = stats.get('memory_bytes') / (1024 ** 3)
                     ram_limit = stats.get("memory_limit_bytes") / (1024 ** 3)
@@ -424,7 +426,7 @@ class TUI(App):
                     await self.find_server()
                     if getattr(self, "server", None):
                         await self.update_server_status()
-                else:                    
+                elif self.server_state == "running":                    
                     await self.update_server_status()
             await asyncio.sleep(10)
             

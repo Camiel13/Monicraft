@@ -226,24 +226,37 @@ class StatsPopUp(ModalScreen):
         align: center middle;
     }
     #pop-up {
-        width: 80;
-        height: auto;
+        width: 100;
+        height: 80%;
     }
 
     #title {
-        dock: top;
         margin: 1 2;
+        height: auto;
     }
+
+    TabbedContent {
+        height: 1fr;
+    }
+    ContentSwitcher {
+        height: 1fr;
+    }
+    TabPane {
+        height: 1fr;
+        padding: 0;
+    }
+    DataTable {
+        height: 1fr;
+        padding: 1 2;
+    }
+
     Button {
         margin: 1 2;
         border: none;
-        min-height: 3;
+        height: 3;
         min-width: 10;
         content-align: center middle;
-        dock: bottom;
-    }
-    DataTable {
-        padding: 1 2;
+        background: black;
     }
     """
     
@@ -267,6 +280,9 @@ class StatsPopUp(ModalScreen):
             yield Button(label="Back", id="back-button")
             
     async def on_mount(self):
+        for button in self.query(Button):
+            button.can_focus = False
+
         if self.app.dummy_server:
             self.stats = self.app.api.get_dummy_stats()
         else:
@@ -383,10 +399,10 @@ class StatsPopUp(ModalScreen):
     
     def format_damage(self, damage: int):
         if not damage:
-            return "0 [red]♥[/red]"
+            return "0 [red]♥\uFE0E[/red]"
         
         hearts = damage / 20 # damage is saved in one factor of 10 bigger to give more precision
-        return f"{hearts:.1f} [red]♥[/red]"    
+        return f"{hearts:.1f} [red]♥\uFE0E[/red]"    
     
     async def on_button_pressed(self, event: Button.Pressed):            
         if event.button.id == "back-button":
