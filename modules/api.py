@@ -81,8 +81,9 @@ class API:
             return ip, port
         else:
             self.app.notify(severity="error",
-                        title="Failed to get server address!",
-                        message=f"An error occured while getting the address: {response.status_code}, {response.text}")
+                            title="Failed to get server address!",
+                            message=f"An error occured while getting the address: {response.status_code}, {response.text}"
+        )
             return None, None
     
     async def get_player_uuid(self, name: str) -> str:
@@ -105,8 +106,9 @@ class API:
             return uuid
         else:
             self.app.notify(severity="error",
-                        title="Failed to get user cache!",
-                        message=f"An error occured while getting the user cache: {response.status_code}, {response.text}")
+                            title="Failed to get user cache!",
+                            message=f"An error occured while getting the user cache: {response.status_code}, {response.text}"
+            )
             return None
 
         
@@ -126,11 +128,12 @@ class API:
             return nbt_data
         else:
             self.app.notify(severity="error",
-                        title="Failed to get user data!",
-                        message=f"An error occured while getting the user data: {response.status_code}, {response.text}")
+                            title="Failed to get user data!",
+                            message=f"An error occured while getting the user data: {response.status_code}, {response.text}"
+            )
             return None
         
-    async def get_stats(self, uuid: str):
+    async def get_player_stats(self, uuid: str):
         response = await self.client.get(
             url=f"{self.url}/files/contents",
             params={"file": f"world/stats/{uuid}.json"}
@@ -139,6 +142,10 @@ class API:
         if response.status_code == 200:
             return response.json()
         else:
+            self.app.notify(severity="error",
+                            title="Failed to get user stats!",
+                            message=f"An error occured while getting the user data: {response.status_code}, {response.text}"
+            )
             return None
         
         
@@ -187,3 +194,52 @@ class DummyAPI:
         
     async def get_mods(self):
         return []
+    
+    def get_dummy_stats(self):
+        dummy_player_stats = {
+            "stats": {
+                "minecraft:custom": {
+                    "minecraft:play_time": 72000,
+                    "minecraft:walk_one_cm": 250000,
+                    "minecraft:sprint_one_cm": 120000,
+                    "minecraft:jump": 340,
+                    "minecraft:damage_dealt": 1500,
+                    "minecraft:damage_taken": 450,
+                    "minecraft:deaths": 3,
+                    "minecraft:mob_kills": 48
+                },
+                "minecraft:killed": {
+                    "minecraft:zombie": 24,
+                    "minecraft:skeleton": 12,
+                    "minecraft:creeper": 7,
+                    "minecraft:spider": 5
+                },
+                "minecraft:mined": {
+                    "minecraft:stone": 150,
+                    "minecraft:iron_ore": 35,
+                    "minecraft:coal_ore": 60,
+                    "minecraft:diamond_ore": 8
+                },
+                "minecraft:crafted": {
+                    "minecraft:torch": 64,
+                    "minecraft:iron_pickaxe": 2,
+                    "minecraft:crafting_table": 1
+                },
+                "minecraft:used": {
+                    "minecraft:iron_pickaxe": 180,
+                    "minecraft:torch": 45
+                },
+                "minecraft:broken": {
+                    "minecraft:stone_pickaxe": 2
+                },
+                "minecraft:picked_up": {
+                    "minecraft:cobblestone": 150,
+                    "minecraft:raw_iron": 35
+                },
+                "minecraft:dropped": {
+                    "minecraft:dirt": 20
+                }
+            },
+            "DataVersion": 3465
+        }
+        return dummy_player_stats

@@ -52,4 +52,4 @@ class Mods(Screen):
             name = attr["name"]
             size = attr["size"] / (1024 ** 2)
             last_changed = attr["modified_at"][:10]
-            self.table.add_row(name, size, last_changed)
+            self.table.add_row(name, f"{size:.2f}", last_changed)

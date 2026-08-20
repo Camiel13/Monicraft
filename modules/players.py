@@ -1,5 +1,6 @@
 import nbtlib
 import asyncio
+from .utils import format_tag
 from textual.screen import Screen
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Header, Input, Label, Button, DataTable
@@ -44,7 +45,7 @@ class Players(Screen):
             yield Button(label="Gamemode", id="gamemode-button")
             
     
-    def on_mount(self):
+    async def on_mount(self):
         self.table = self.query_one("#player-table")
         self.table.add_columns("Name", "Health", "Hunger", "XP Level", "Position", "Dimension", "Gamemode")
         
@@ -92,7 +93,7 @@ class Players(Screen):
         hunger = int(nbt_data['foodLevel'])
         xp_level = int(nbt_data['XpLevel'])
         pos = list(nbt_data['Pos'])
-        dimension = nbt_data['Dimension'].split(":")[1].replace("_", " ").title()
+        dimension = format_tag(nbt_data['Dimension'])
         
         gamemode_number = int(nbt_data["playerGameType"])
         if gamemode_number == 0:
@@ -127,7 +128,7 @@ class Players(Screen):
                 gamemode = row_data[6]
                 
                 if event.button.id == "stats-button":
-                    self.app.push_screen(StatsPopUp(player_name="Camilio13"))
+                    self.app.push_screen(StatsPopUp(player_name=player_name))
                 elif event.button.id == "message-button":
                     self.app.push_screen(MessagePopUp(player_name=player_name))
                 elif event.button.id == "kick-button":

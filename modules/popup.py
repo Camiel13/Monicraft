@@ -1,7 +1,8 @@
+from .utils import format_tag
 from textual.screen import ModalScreen
 from textual.app import App, ComposeResult
 from textual.containers import Vertical, Horizontal
-from textual.widgets import Label, Button, Input, TabbedContent, TabPane
+from textual.widgets import Label, Button, Input, TabbedContent, TabPane, DataTable
 
 class GamemodePopUp(ModalScreen):
     AUTO_FOCUS="#label"
@@ -225,7 +226,7 @@ class StatsPopUp(ModalScreen):
         align: center middle;
     }
     #pop-up {
-        width: 65;
+        width: 80;
         height: auto;
     }
 
@@ -241,30 +242,37 @@ class StatsPopUp(ModalScreen):
         content-align: center middle;
         dock: bottom;
     }
+    DataTable {
+        padding: 1 2;
+    }
     """
     
-    def __init__(self, player_name: str, stats: dict, **kwargs):
+    def __init__(self, player_name: str, **kwargs):
         super().__init__(**kwargs)
         self.player_name = player_name
-        self.stats = stats
+
     
     def compose(self):
         with Vertical(id="pop-up"):
             yield Label(f"Statistics for {self.player_name}", id="title")
             
-            with TabbedContent:
+            with TabbedContent():
                 with TabPane("General", id="tab-general"):
                     yield DataTable(id="table-general")
-                with TabPane("Mined", id="tab-mined"):
-                    yield DataTable(id="table-mined")
-                with TabPane("Killed", id="tab-killed"):
-                    yield DataTable(id="table-killed")
-                with TabPane("Crafted", id="tab-crafted"):
-                    yield DataTable(id="table-crafted")
+                with TabPane("Entities", id="tab-entities"):
+                    yield DataTable(id="table-entities")
+                with TabPane("Items", id="tab-items"):
+                    yield DataTable(id="table-items")
                     
             yield Button(label="Back", id="back-button")
             
-    def on_mount(self):
+    async def on_mount(self):
+        if self.app.dummy_server:
+            self.stats = self.app.api.get_dummy_stats()
+        else:
+            uuid = await self.app.api.get_player_uuid(self.player_name)
+            self.stats = await self.app.api.get_player_stats(uuid)
+        
         if self.stats:
             stats = self.stats["stats"]
         else:
@@ -276,20 +284,81 @@ class StatsPopUp(ModalScreen):
             )
             self.dismiss()
             return
-            
-        # Create the general tab and get the data
+        
+        ##############################################
+        # Create the general tab and fill in the data 
+        ##############################################
         table_gen = self.query_one("#table-general", DataTable)
         table_gen.add_columns("Statistics", "Value")
-        gen_data = stats["minecraft:custom"]
+        gen_data = stats.get("minecraft:custom", {})
         
-        custom_stats = [
-            ("Play Time", "minecraft:play_time", self.format_ticks),
-            ("Deaths", "minecraft:deaths", self.format_num),
-        ]
+        for tag, value in gen_data.items():        
+            if "time" in tag:
+                value = self.format_ticks(value)
+                
+            if "one_cm" in tag:
+                tag = tag.replace("one_cm", "distance")
+                value = self.format_cm(value)
+                
+            if "damage" in tag:
+                value = self.format_damage(value)
+            
+            name = format_tag(tag)
+            table_gen.add_row(name, value)
+            
+        ###############################################
+        # Create the entities tab and fill in the data 
+        ###############################################
+        table_entities = self.query_one("#table-entities", DataTable)
+        table_entities.add_columns("Entity", "Kills")
+        entities_data = stats.get("minecraft:killed", {})
         
-        # Fill in the important data
-        for name, tag, formatter in custom_stats:
-            table_gen.add_row(name, formatter(gen_data["tag"]))
+        sorted_entities = sorted(entities_data.items(), key=lambda mob: mob[1], reverse=True)
+        for tag, value in sorted_entities:
+            name = format_tag(tag)
+            table_entities.add_row(name, value)
+
+        ############################################
+        # Create the items tab and fill in the data 
+        ############################################
+        table_items = self.query_one("#table-items", DataTable)
+        table_items.add_columns("Item", "Crafted", "Mined", "Used", "Broken", "Picked up", "Dropped")
+        
+        crafted_data = stats.get("minecraft:crafted", {})
+        mined_data = stats.get("minecraft:mined", {})
+        used_data = stats.get("minecraft:used", {})
+        broken_data = stats.get("minecraft:broken", {})
+        picked_up_data = stats.get("minecraft:picked_up", {})
+        dropped_data = stats.get("minecraft:dropped", {})
+        
+        all_items = set().union(
+            crafted_data.keys(),
+            mined_data.keys(),
+            used_data.keys(),
+            broken_data.keys(),
+            picked_up_data.keys(),
+            dropped_data.keys(),
+        )
+        sorted_items = sorted(all_items, key=lambda item: crafted_data.get(item, 0), reverse=True)
+        
+        for item in sorted_items:
+            name = format_tag(item)
+            crafted = crafted_data.get(item, 0)
+            mined = mined_data.get(item, 0)
+            used = used_data.get(item, 0)
+            broken = broken_data.get(item, 0)
+            picked_up = picked_up_data.get(item, 0)
+            dropped = dropped_data.get(item, 0)
+            
+            table_items.add_row(
+                name,
+                crafted,
+                mined,
+                used,
+                broken,
+                picked_up,
+                dropped
+            )
         
     def format_ticks(self, ticks: int):
         if not ticks:
@@ -302,7 +371,7 @@ class StatsPopUp(ModalScreen):
         
         if hours > 0:
             return f"{hours}h {minutes}m {seconds}s"
-        elif hours < 0 and minutes > 0:
+        elif minutes > 0:
             return f"{minutes}m {seconds}s"
         else:
             return f"{seconds}s"
@@ -310,11 +379,15 @@ class StatsPopUp(ModalScreen):
     def format_cm(self, cm: int):
         if not cm:
             return "0 km"
-        return f"{(cm / 1000):.2f} km"
+        return f"{(cm / 100_000):.2f} km"
     
-    def format_num(self, val):
-        return f"{val or 0}"
+    def format_damage(self, damage: int):
+        if not damage:
+            return "0 [red]♥[/red]"
         
-    def format_bar_num(self, val):
-        return f"{val/2 or 0}"
-        
+        hearts = damage / 20 # damage is saved in one factor of 10 bigger to give more precision
+        return f"{hearts:.1f} [red]♥[/red]"    
+    
+    async def on_button_pressed(self, event: Button.Pressed):            
+        if event.button.id == "back-button":
+            self.dismiss()

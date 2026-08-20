@@ -153,6 +153,7 @@ class TUI(App):
         self.status_server = None
         self.query_server = None
         self.dummy_server = True if self.api.__class__.__name__ == "DummyAPI" else False
+        self.api.app = self
     
     def compose(self):
         yield Header(show_clock=True, name="Monicraft", icon="")
@@ -231,7 +232,7 @@ class TUI(App):
                 
                 self.run_worker(self.stream_data, thread=False)
                 
-                self.console_log.write("[green]Succesfully connected to the server![/]")
+                self.console_log.write("[green]Successfully connected to the server![/]")
                 
                 return
             except Exception as e:
@@ -285,7 +286,7 @@ class TUI(App):
         else:
             self.notify(severity="error",
                         title="Failed to get server ip or port!",
-                        message="There was a problem while getting the server port and ip form the server."
+                        message="There was a problem while getting the server port and ip from the server."
             )
                         
     async def send_command(self, command: str):
@@ -309,7 +310,7 @@ class TUI(App):
         except Exception as e:
             self.console_log.write(f"[bold red] Command couldn't be sent: {e}[/]")
             self.notify(title="Command couldn't be send!",
-                        message=f"The command could not been send to the server: {e}",
+                        message=f"The command could not been sent to the server: {e}",
                         severity="error",
                         timeout=10.0
             )
@@ -419,8 +420,10 @@ class TUI(App):
     async def data_loop(self):
         while True:
             if self.api.is_configured:
-                if not hasattr(self, "server") or self.server is None:
+                if getattr(self, "server", None) is None and not self.dummy_server:
                     await self.find_server()
+                    if getattr(self, "server", None):
+                        await self.update_server_status()
                 else:                    
                     await self.update_server_status()
             await asyncio.sleep(10)
