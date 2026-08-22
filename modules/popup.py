@@ -400,10 +400,10 @@ class StatsPopUp(ModalScreen):
     
     def format_damage(self, damage: int):
         if not damage:
-            return "0 [red]♥[/red]"
+            return "0 [red]Hearts[/red]"
         
         hearts = damage / 20 # damage is saved in one factor of 10 bigger to give more precision
-        return f"{hearts:.1f} [red]♥[/red]"    
+        return f"{hearts:.1f} [red]Hearts[/red]"    
     
     async def on_button_pressed(self, event: Button.Pressed):            
         if event.button.id == "back-button":

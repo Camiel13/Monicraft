@@ -89,8 +89,13 @@ class Players(Screen):
         previous_row = self.table.cursor_row if self.table.row_count > 0 else 0
         
         if self.app.dummy_server:
-            player_name, nbt_data = self.app.api.get_dummy_player_data()
             self.table.clear()
+            if self.offline_included:
+                for _ in range(3):
+                    player_name, nbt_data = self.app.api.get_dummy_player_data()
+                    self.add_player_to_table(nbt_data=nbt_data, name=player_name, is_online=False)
+            
+            player_name, nbt_data = self.app.api.get_dummy_player_data()
             self.add_player_to_table(nbt_data=nbt_data, name=player_name, is_online=True)
             return
             

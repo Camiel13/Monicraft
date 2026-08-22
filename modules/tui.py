@@ -372,14 +372,6 @@ class TUI(App):
     async def on_input_submitted(self, event: Input.Submitted):
         if event.input.id == "console-input":
             command = event.value.strip()
-            if command == "settings":
-                self.push_screen("settings")
-                event.input.value = ""
-                return
-            elif command == "mods":
-                self.push_screen("mods")
-                event.input.value = ""
-                return
             
             if command:
                 event.input.value = "" # clear the text in the input

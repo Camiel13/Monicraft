@@ -72,6 +72,9 @@ class API:
         return token, socket_url
   
     async def get_mods(self):
+        if not self.app.connection_established:
+            return None
+            
         response = await self.client.get(
             url=f"{self.url}/files/list",
             params={"directory": "/mods"}
