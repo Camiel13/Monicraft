@@ -23,25 +23,25 @@ Monicraft is a TUI-based application that makes it easier to monitor your rented
 # Installation Guide
 ---
 ## Installation through binary
-Download the right binary for your operating system in [](RELEASE URL GOES HERE WHEN BUILT) and run the following commands:
+Download the right binary for your operating system from the [v1.0.0 Release](https://github.com/Camiel13/Monicraft/releases/tag/v1.0.0) and run the following commands:
 
 Windows:
 ```shell
 # Start the program
-.\monicraft.exe
+.\monicraft-windows.exe
 
 # Or start the program in dummy mode
-.\monicraft.exe --dummy
+.\monicraft-windows.exe --dummy
 ```
 
 Linux:
 ```bash
-# Start the program
-chmod +x monicraft
-./monicraft
+# Make executable and start the program
+chmod +x monicraft-linux
+./monicraft-linux
 
 # Or start the program in dummy mode
-./monicraft --dummy
+./monicraft-linux --dummy
 ```
 
 ## Installation from source
