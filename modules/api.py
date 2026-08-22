@@ -14,6 +14,7 @@ class API:
         self.panel_endpoint = os.getenv("PANEL_ENDPOINT")
         self.api_key = os.getenv("API_KEY")
         self.uuid_cache = {} # will contain {"Steve": "owijfgwkjnefkjnrgoenrgijnekjnge"}
+        self.player_cache = {} # will contain {"owijfgwkjnefkjnrgoenrgijnekjnge": Player()}
         
         self.init_client()
         
@@ -31,6 +32,32 @@ class API:
             "Accept": "application/json"
         }
         self.client = httpx.AsyncClient(headers=self.headers, timeout=3.0)
+        
+    async def init_caches(self):
+        usercache = await self.get_usercache()
+        await self.cache_uuids(usercache=usercache)
+        
+        for name, uuid in self.uuid_cache.items():
+            self.player_cache[uuid] = Player(name=name, uuid=uuid)
+            
+    async def test_connection(self) -> tuple[bool, str]:
+        if not self.is_configured:
+            return False, "Credentials not filled in."
+        try:
+            response = await self.client.get(f"{self.url}/websocket")
+            if response.status_code == 200:
+                return True, "A connection was successfully established."
+            elif response.status_code == 401:
+                return False, "You haven't filled in your server's credentials yet, you can do this by simply filling them in in the settings menu."
+            elif response.status_code == 403:
+                return False, "You have insufficient permissions to access the API."
+            elif response.status_code == 404:
+                return False, "Server ID was not found, double check it in your settings."
+            else:
+                return False, f"Server returned error code: {response.status_code}."
+        except Exception as e:
+            return False, f"Could not reach server panel: {e}."
+ 
 
     async def get_websocket_creds(self):
         response = await self.client.get(
@@ -82,34 +109,43 @@ class API:
         else:
             self.app.notify(severity="error",
                             title="Failed to get server address!",
-                            message=f"An error occured while getting the address: {response.status_code}, {response.text}"
+                            message=f"An error occurred while getting the address: {response.status_code}, {response.text}"
         )
             return None, None
-    
-    async def get_player_uuid(self, name: str) -> str:
-        if name.lower() in self.uuid_cache.keys():
-            return self.uuid_cache[name.lower()]
         
+    async def get_usercache(self):
         response = await self.client.get(
             url=f"{self.url}/files/contents",
             params={"file": "usercache.json"}
         )
         
         if response.status_code == 200:
-            usercache = response.json()
-            # Cache all the users in usercache.json
-            for item in usercache:
-                self.uuid_cache[item["name"].lower()] = item["uuid"]
-            
-            # Get the uuid for the given name
-            uuid = self.uuid_cache.get(name)
-            return uuid
+            return response.json()
         else:
             self.app.notify(severity="error",
                             title="Failed to get user cache!",
-                            message=f"An error occured while getting the user cache: {response.status_code}, {response.text}"
+                            message=f"An error occurred while getting the user cache: {response.status_code}, {response.text}"
             )
             return None
+        
+    async def cache_uuids(self, usercache):
+        if not usercache:
+            return
+        
+        # Cache all the users in usercache.json
+        for item in usercache:
+                self.uuid_cache[item["name"]] = item["uuid"]
+                
+    async def get_player_uuid(self, name: str) -> str:
+        if name in self.uuid_cache.keys():
+            return self.uuid_cache[name]
+        
+        usercache = await self.get_usercache()
+        await self.cache_uuids(usercache=usercache)
+        
+        # Get the uuid for the given name
+        uuid = self.uuid_cache.get(name)
+        return uuid
         
     async def get_player_data(self, uuid=None, name=None) -> object:        
         if not uuid and not name:
@@ -131,7 +167,7 @@ class API:
         else:
             self.app.notify(severity="error",
                             title="Failed to get user data!",
-                            message=f"An error occured while getting the user data: {response.status_code}, {response.text}"
+                            message=f"An error occurred while getting the user data: {response.status_code}, {response.text}"
             )
             return None
         
@@ -146,34 +182,16 @@ class API:
         else:
             self.app.notify(severity="error",
                             title="Failed to get user stats!",
-                            message=f"An error occured while getting the user data: {response.status_code}, {response.text}"
+                            message=f"An error occurred while getting the user stats: {response.status_code}, {response.text}"
             )
             return None
         
     async def get_recent_players(self):
-        response = await self.client.get(
-            url=f"{self.url}/files/contents",
-            params={"file": "usercache.json"}
-        )
+        usercache = await self.get_usercache()
+        await self.cache_uuids(usercache=usercache)
         
-        if response.status_code == 200:
-            usercache = response.json()
-            # Cache all the users in usercache.json
-            for item in usercache:
-                self.uuid_cache[item["name"].lower()] = item["uuid"]
-            
-            data = [{"name": item["name"], "uuid": item["uuid"]} for item in usercache]
-
-            return data
-        else:
-            self.app.notify(severity="error",
-                            title="Failed to get user cache!",
-                            message=f"An error occured while getting the user cache: {response.status_code}, {response.text}"
-            )
-            return None
-        
-    
-        
+        data = [{"name": item["name"], "uuid": item["uuid"]} for item in usercache]
+        return data     
         
 class DummyAPI:
     def __init__(self):
@@ -184,6 +202,10 @@ class DummyAPI:
             "Authorization": f"Bearer {self.api_key}",
             "Accept": "application/json"
         }
+        self.player_cache = {}
+        
+    async def init_caches(self):
+        pass
         
     @property
     def url(self):
@@ -269,3 +291,14 @@ class DummyAPI:
             "DataVersion": 3465
         }
         return dummy_player_stats
+    
+    async def test_connection(self):
+        return True, "Successfully connected to dummy server."
+    
+    
+class Player:
+    def __init__(self, name: str, uuid:str):
+        self.name = name
+        self.uuid = uuid
+        self.nbt_data = None
+        self.online = None

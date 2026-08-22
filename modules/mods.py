@@ -8,12 +8,22 @@ from textual.widgets import Header, Button, DataTable
 class Mods(Screen):
     AUTO_FOCUS="#mods-table"
     CSS = """
+    Header {
+       height: 3;
+       align: center middle;
+       background: darkgreen;
+    }
+    
     Button {
         margin: 1;
         border: none;
         min-height: 3;
         min-width: 8;
         content-align: center middle;
+    }
+    #back-button {
+        width: 8;
+        min-width: 8;
     }
     #mods-table {
         width: 100%;
@@ -27,7 +37,7 @@ class Mods(Screen):
         return self.app.api
     
     def compose(self):
-        yield Header(name="Mods", show_clock=True)
+        yield Header(show_clock=True, name="Mods", icon="")
         yield Button(label="<", id="back-button")
         yield DataTable(id="mods-table")
         

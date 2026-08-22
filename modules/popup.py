@@ -136,7 +136,7 @@ class MessagePopUp(ModalScreen):
         if event.button.id == "send-button":
             message = self.query_one("#message-input").value
             if message:
-                await self.app.send_command(f'/tellraw {self.player_name} {{"text":"[Server ➔ You] > {message}"}}')
+                await self.app.send_command(f'tellraw {self.player_name} {{"text":"[Server ➔ You] > {message}"}}')
                 self.dismiss()
             
         elif event.button.id == "cancel-button":
@@ -146,7 +146,7 @@ class MessagePopUp(ModalScreen):
         if event.input.id == "message-input":
             message = event.value
             if message:
-                await self.app.send_command(f'/tellraw {self.player_name} {{"text":"[Server ➔ You] > {message}"}}')
+                await self.app.send_command(f'tellraw {self.player_name} {{"text":"[Server ➔ You] > {message}"}}')
                 self.dismiss()
             
 class KickBanPopUp(ModalScreen):
@@ -207,7 +207,7 @@ class KickBanPopUp(ModalScreen):
         if event.button.id == "send-button":
             reason = self.query_one("#reason-input").value
             if reason:
-                await self.app.send_command(f'/{self.action.lower()} {self.player_name} {reason}')
+                await self.app.send_command(f'{self.action.lower()} {self.player_name} {reason}')
                 self.dismiss()
             
         elif event.button.id == "cancel-button":
@@ -217,7 +217,7 @@ class KickBanPopUp(ModalScreen):
         if event.input.id == "reason-input":
             reason = event.value
             if reason:
-                await self.app.send_command(f'/{self.action.lower()} {self.player_name} {reason}')
+                await self.app.send_command(f'{self.action.lower()} {self.player_name} {reason}')
                 self.dismiss()
                 
 class StatsPopUp(ModalScreen):
@@ -254,7 +254,8 @@ class StatsPopUp(ModalScreen):
         margin: 1 2;
         border: none;
         height: 3;
-        min-width: 10;
+        width: 8;
+        min-width: 5;
         content-align: center middle;
         background: black;
     }
@@ -399,10 +400,10 @@ class StatsPopUp(ModalScreen):
     
     def format_damage(self, damage: int):
         if not damage:
-            return "0 [red]♥\uFE0E[/red]"
+            return "0 [red]♥[/red]"
         
         hearts = damage / 20 # damage is saved in one factor of 10 bigger to give more precision
-        return f"{hearts:.1f} [red]♥\uFE0E[/red]"    
+        return f"{hearts:.1f} [red]♥[/red]"    
     
     async def on_button_pressed(self, event: Button.Pressed):            
         if event.button.id == "back-button":

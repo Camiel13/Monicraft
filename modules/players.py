@@ -9,12 +9,22 @@ from .popup import GamemodePopUp, MessagePopUp, KickBanPopUp, StatsPopUp
 class Players(Screen):
     AUTO_FOCUS="#player-table"
     CSS = """
+    Header {
+       height: 3;
+       align: center middle;
+       background: darkgreen;
+    }    
+    
     Button {
         margin: 1;
         border: none;
         min-height: 3;
         min-width: 8;
         content-align: center middle;
+    }
+    #back-button, #refresh-button {
+        width: 8;
+        min-width: 8;
     }
     #include-offline-button.on {
         background: green;
@@ -37,10 +47,10 @@ class Players(Screen):
     """
     
     def compose(self):
-        yield Header(name="Player Manager", show_clock=True)
+        yield Header(name="Player Manager", show_clock=True, icon="")
         with Horizontal(id="header-buttons"):
             yield Button(label="<", id="back-button")
-            yield Button(label="↻\uFE0E", id="refresh-button")
+            yield Button(label="↻", id="refresh-button")
             yield Button(label="Include Offline Players", id="include-offline-button")
         yield DataTable(id="player-table")
         with Horizontal(id="footer"):
@@ -57,7 +67,7 @@ class Players(Screen):
         self.offline_player_cache = {}
         
         # Making the table with the right columns
-        self.table = self.query_one("#player-table")
+        self.table = self.query_one("#player-table", DataTable)
         self.table.add_columns("Name", "Status", "Health", "Hunger", "XP Level", "Position", "Dimension", "Gamemode")
         
         # Build the table
@@ -67,7 +77,8 @@ class Players(Screen):
         for button in self.query(Button):
             button.can_focus = False
     
-    async def get_online_player_names(self):
+    
+    def get_online_player_names(self):
         if self.app.query_server and self.app.query_server.players.list:
             return set(self.app.query_server.players.list)
         elif self.app.status_server and self.app.status_server.players.sample:
@@ -75,6 +86,8 @@ class Players(Screen):
         return set()
             
     async def build_table(self):
+        previous_row = self.table.cursor_row if self.table.row_count > 0 else 0
+        
         if self.app.dummy_server:
             player_name, nbt_data = self.app.api.get_dummy_player_data()
             self.table.clear()
@@ -82,42 +95,62 @@ class Players(Screen):
             return
             
         try:
-            # Get all the online players as a set
-            online_names = await self.get_online_player_names()
+            # Get all the online players as a set and get all the players that ever played
+            online_names = self.get_online_player_names()
+            all_players = list(self.app.api.player_cache.values())   
             
-            # Build the dictionary with all the players (online or offline)
-            if self.offline_included:
-                cached_players = await self.app.api.get_recent_players()
-                players_to_load = cached_players or []
-            else:
-                players_to_load = [{"name": name, "uuid": None} for name in online_names]
-            
-            # Get the NBT data for all the players
-            tasks = [self.app.api.get_player_data(name=player["name"], uuid=player["uuid"]) for player in players_to_load]
-            nbt_data_list = await asyncio.gather(*tasks)
-            
-            # Clear the table after the requests
-            self.table.clear()
-            
-            player_entries = []
-            for player, nbt in zip(players_to_load, nbt_data_list):
-                name = player["name"]
-                is_online = name in online_names
-                player_entries.append((name, nbt, is_online))
+            # Find out what players needs to be updated
+            players_to_update = [] # Will contain player objects
+            for player in all_players:
+                player.online = player.name in online_names
                 
-            player_entries.sort(key=lambda x: not x[2])
-            for name, nbt, is_online in player_entries:
-                self.add_player_to_table(name=name, nbt_data=nbt, is_online=is_online)
+                if player.online or (self.offline_included and player.nbt_data is None):
+                    players_to_update.append(player)
+            
+            # Update the nbt data when needed 
+            if players_to_update:
+                if len(players_to_update) > 230:
+                    raise Exception("Too many players need to be updated, would exceed rate limits.")
+                
+                tasks = [self.app.api.get_player_data(name=p.name, uuid=p.uuid) for p in players_to_update]
+                nbt_data_list = await asyncio.gather(*tasks)
+                
+                for player, nbt in zip(players_to_update, nbt_data_list):
+                    if nbt is not None:
+                        player.nbt_data = nbt
+            
+            # Get the players that need to be displayed
+            if self.offline_included:
+                display_players = all_players
+            else:
+                display_players = [p for p in all_players if p.online]    
+            display_players.sort(key=lambda p: (not p.online, p.name.lower()))
+            
+            # Rebuild the table and display the right players
+            self.table.clear()
+            for player in display_players:
+                self.add_player_to_table(
+                    name=player.name,
+                    nbt_data=player.nbt_data,
+                    is_online=player.online
+                )
+            
+            # Select the previously selected row
+            try:
+                self.table.move_cursor(row=previous_row)
+            except Exception:
+                self.notify(severity="warning",
+                            title="Previously selected user went offline!",
+                            message=f"The previously selected user logged off. To see them, enable Include Offline Players.")
         except Exception as e:
             self.notify(severity="error",
                         title="Failed to build the table!",
-                        message=f"Failed to build the table: {e}.")        
-        
+                        message=f"Failed to build the table: {e}.")
 
     async def data_loop(self):
         while True:
             await self.build_table()
-            await asyncio.sleep(10)
+            await asyncio.sleep(self.app.player_update_interval)
                 
     def add_player_to_table(self, name: str, nbt_data, is_online: bool):
         if not nbt_data:
@@ -159,8 +192,8 @@ class Players(Screen):
             
         if event.button.id in ["stats-button", "message-button", "kick-button", "ban-button", "gamemode-button"]:
             if self.table.row_count > 0:
-                selected_row = self.table.cursor_row
-                row_data = self.table.get_row_at(selected_row)
+                self.selected_row = self.table.cursor_row
+                row_data = self.table.get_row_at(self.selected_row)
                 
                 player_name = row_data[0]
                 gamemode = row_data[7]
@@ -216,7 +249,7 @@ class Players(Screen):
             await self.build_table()
                 
     async def refresh_data(self):
-        await self.app.send_command("/save-all")
+        await self.app.send_command("save-all")
         await asyncio.sleep(0.5)
         await self.app.update_server_status()
         await self.build_table()

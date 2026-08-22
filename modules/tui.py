@@ -35,10 +35,6 @@ class TUI(App):
        background: darkgreen;
     }
     
-    #body {
-        height: 1fr;
-    }
-    
     #sidebar {
         width: 1fr;
         min-width: 25;
@@ -72,11 +68,13 @@ class TUI(App):
     }
     
     #chat-mode-button {
+        width: 10;
         min-width: 5;
         height: 3;
         background: #3a473b;
         border: none;
         margin: 0;
+        content-align: center middle;
     }
     #chat-mode-button:hover {
         background: #485749;
@@ -91,11 +89,13 @@ class TUI(App):
     .stats {
         width: 100%;
         height: auto;
-        margin-top: 1;
+        margin: 1 0;
         padding: 1;
-        border: inner #455446;
+        border: round #455446;
+        border-title-align: center;
+        border-title-color: #88c090;
         background: #3a473b;
-        text-align: center;
+        content-align: center middle;
     }
     
     #power-buttons {
@@ -105,12 +105,12 @@ class TUI(App):
     }
     .power-button {
         border: none;
-        min-width: 5;
+        width: 7;
+        min-width: 7;
         height: 3;
-        padding: 0 1;
         background: #3a473b;
         margin: 0 1;
-        align: center middle;
+        content-align: center middle;
     }
     .power-button:hover {
         background: #485749;
@@ -118,17 +118,16 @@ class TUI(App):
     
     #nav-buttons {
         width: 100%;
-        margin: 1;
+        margin: 1 0;
         align: center bottom;
     }
     .nav-button {
         border: none;
+        width: 1fr;
         min-width: 9;
         height: 3;
-        padding: 0 1;
         background: #3a473b;
         margin: 0 1;
-        align: center middle;
         content-align: center middle;
     }
     .nav-button:hover {
@@ -147,35 +146,47 @@ class TUI(App):
     def __init__(self, api_client, **kwargs):
         super().__init__(**kwargs)
         self.api = api_client
+        self.api.app = self
+
+        # Dummy server toggle
+        self.dummy_server = True if self.api.__class__.__name__ == "DummyAPI" else False
+
+        # Server information variables
         self.ws = None
         self.chat_mode = False
         self.query_enabled = True
         self.status_server = None
         self.query_server = None
         self.server_state = None
-        self.dummy_server = True if self.api.__class__.__name__ == "DummyAPI" else False
-        self.api.app = self
+        
+        # Changeable settings
+        self.chat_mode_prefix = "> "
+        self.server_ping_interval = 10
+        self.player_update_interval = 30
+        
     
     def compose(self):
         yield Header(show_clock=True, name="Monicraft", icon="")
         with Horizontal(id="body"):
             with Vertical(id="sidebar"):
                 with Horizontal(id="power-buttons"):
-                    yield Button("▶\uFE0E", id="start-button", classes="power-button")
-                    yield Button("↻\uFE0E", id="restart-button", classes="power-button")
-                    yield Button("■\uFE0E", id="stop-button", classes="power-button")
-                    yield Button("☠\uFE0E", id="kill-button", classes="power-button")
+                    yield Button("▶", id="start-button", classes="power-button")
+                    yield Button("↻", id="restart-button", classes="power-button")
+                    yield Button("■", id="stop-button", classes="power-button")
+                    yield Button("✕", id="kill-button", classes="power-button")
                 yield Label("Connecting to server...", classes="stats", id="server-status")
                 yield Label("Connecting to server...", classes="stats", id="ram-usage")
                 yield Label("Connecting to server...", classes="stats", id="cpu-usage")
+                yield Label("Connecting to server...", classes="stats", id="disk-usage")
+                yield Label("Connecting to server...", classes="stats", id="network-usage")
                 with Horizontal(id="nav-buttons"):
-                    yield Button(label="⚙\uFE0E", id="settings-button", classes="nav-button")
-                    yield Button(label="⚒\uFE0E", id="mods-button", classes="nav-button")
-                    yield Button(label="☺\uFE0E", id="players-button", classes="nav-button")
+                    yield Button(label="ᴄꜰɢ", id="settings-button", classes="nav-button")
+                    yield Button(label="ᴍᴏᴅ", id="mods-button", classes="nav-button")
+                    yield Button(label="ᴘʟʏʀ", id="players-button", classes="nav-button")
             with Vertical(id="console"):
                 yield RichLog(id="console-log", highlight=True, markup=True)
                 with Horizontal(id="input-box"):
-                    yield Button(label="✉\uFE0E", id="chat-mode-button")
+                    yield Button(label=">>", id="chat-mode-button")
                     yield Input(id="console-input", placeholder="Type a minecraft command to send it to the server...")
                     
     async def on_mount(self):        
@@ -190,16 +201,39 @@ class TUI(App):
         self.server_status = self.query_one("#server-status", Label)
         self.ram_usage = self.query_one("#ram-usage", Label)
         self.cpu_usage = self.query_one("#cpu-usage", Label)
+        self.disk_usage = self.query_one("#disk-usage", Label)
+        self.network_usage = self.query_one("#network-usage", Label)
+        
+        self.server_status.border_title = "Status"
+        self.ram_usage.border_title = "RAM"
+        self.cpu_usage.border_title = "CPU"
+        self.disk_usage.border_title = "Disk"
+        self.network_usage.border_title = "Network"
         
         # Tweak the created components
         for button in self.query(Button):
             button.can_focus = False
         
-        # Start the background workers
-        if not self.api.is_configured:
-            self.notify(severity="warning",
-                        title="Credentials not filled in.",
-                        message="You've not filled in your server's credentials yet, you can do this manually in the .env file or simply fill them in in the settings menu.",
+        # Start the background workers and check the connection
+        self.connection_established, message = await self.api.test_connection()
+        
+        if self.connection_established:
+            try:
+                await self.api.init_caches()
+            except Exception as e:
+                self.notify(severity="error",
+                            title="Failed to initialize caches!",
+                            message=f"Could not reach server: {e}")    
+                
+            self.notify(severity="information",
+                        title="Connection successful!", 
+                        message=message,
+                        timeout=5
+            )
+        else:
+            self.notify(severity="error",
+                        title="Connection failed!",
+                        message=message,
                         timeout=15
             )
         
@@ -214,7 +248,7 @@ class TUI(App):
         if self.dummy_server:
             self.ws = None
             self.run_worker(self.stream_dummy_data, thread=False)
-            self.console_log.write("[green]Succesfully connected to the dummy server![/]")
+            self.console_log.write("[green]Successfully connected to the dummy server![/]")
             return
 
         while True:
@@ -237,12 +271,6 @@ class TUI(App):
                 
                 return
             except Exception as e:
-                self.notify(title="Couldn't connect to server!",
-                            message=f"Server connection could not be established. Retrying in 5 seconds...",
-                            severity="error",
-                            timeout=6.0
-                )
-                
                 # Wait 5 seconds until next try
                 await asyncio.sleep(5)
     
@@ -264,11 +292,15 @@ class TUI(App):
                     ram_usage = stats.get('memory_bytes') / (1024 ** 3)
                     ram_limit = stats.get("memory_limit_bytes") / (1024 ** 3)
                     cpu_percent = stats.get("cpu_absolute")
+                    disk_usage = stats.get("disk_bytes") / (1024 ** 3)
+                    network_inbound = stats["network"].get("rx_bytes") / (1024 ** 2)
+                    network_outbound = stats["network"].get("tx_bytes") / (1024 ** 2)
                     
-                    
-                    self.server_status.update(f"Server status: [{server_status_color}]{server_status}[/]")
-                    self.ram_usage.update(f"RAM: [green]{ram_usage:.2f}[/]/[green]{ram_limit:.2f}[/] GB")
-                    self.cpu_usage.update(f"CPU: {cpu_percent}%")
+                    self.server_status.update(f"[{server_status_color}]{server_status.upper()}[/]")
+                    self.ram_usage.update(f"[green]{ram_usage:.2f}[/]/[green]{ram_limit:.2f}[/] GB")
+                    self.cpu_usage.update(f"{cpu_percent:.2f}%")
+                    self.disk_usage.update(f"{disk_usage:.2f} GB")
+                    self.network_usage.update(f"{network_inbound:.2f}/{network_outbound:.2f} MB")
             
         except Exception as e:
             self.console_log.write(f"[bold red]Server connection lost: {e}[/]")
@@ -300,7 +332,7 @@ class TUI(App):
             await self.connect_ws()
             
         try:
-            command = f"say {command}" if self.chat_mode else command
+            command = f"say {self.chat_mode_prefix + command}" if self.chat_mode else command
             
             payload = {
                 "event": "send command",
@@ -311,8 +343,8 @@ class TUI(App):
             
         except Exception as e:
             self.console_log.write(f"[bold red] Command couldn't be sent: {e}[/]")
-            self.notify(title="Command couldn't be send!",
-                        message=f"The command could not been sent to the server: {e}",
+            self.notify(title="Command could not be sent!",
+                        message=f"The command could not be sent to the server: {e}",
                         severity="error",
                         timeout=10.0
             )
@@ -421,14 +453,17 @@ class TUI(App):
     
     async def data_loop(self):
         while True:
-            if self.api.is_configured:
-                if getattr(self, "server", None) is None and not self.dummy_server:
-                    await self.find_server()
-                    if getattr(self, "server", None):
+            if self.connection_established:
+                try:
+                    if getattr(self, "server", None) is None and not self.dummy_server:
+                        await self.find_server()
+                        if getattr(self, "server", None):
+                            await self.update_server_status()
+                    elif self.server_state == "running":                    
                         await self.update_server_status()
-                elif self.server_state == "running":                    
-                    await self.update_server_status()
-            await asyncio.sleep(10)
+                except Exception:
+                    pass
+            await asyncio.sleep(self.server_ping_interval)
             
     async def stream_dummy_data(self):
         try:
@@ -439,9 +474,11 @@ class TUI(App):
                 ram_limit =  10.0
                 cpu_percent = random.uniform(0.5, 100.0)
                 
-                self.server_status.update(f"Server status: [{server_status_color}]{server_status}[/]")
-                self.ram_usage.update(f"RAM: [green]{ram_usage:.2f}[/]/[green]{ram_limit:.2f}[/] GB")
-                self.cpu_usage.update(f"CPU: {cpu_percent:.2f}%")
+                self.server_status.update(f"[{server_status_color}]{server_status.upper()}[/]")
+                self.ram_usage.update(f"[green]{ram_usage:.2f}[/]/[green]{ram_limit:.2f}[/] GB")
+                self.cpu_usage.update(f"{cpu_percent:.2f}%")
+                self.disk_usage.update(f"{random.uniform(5.0, 20.0):.2f} GB")
+                self.network_usage.update(f"{random.uniform(0.5, 10.0):.2f}/{random.uniform(1.0, 30.0):.2f} MB")
                 
                 await asyncio.sleep(2)
             
