@@ -94,3 +94,7 @@ API_KEY="ptlc_xxxxxxxxxxxxxxxxxxxxxxxx"
 PANEL_ENDPOINT="panel.yourdomain.com"
 SERVER_ID="698408ad"
 ```
+
+# AI declaration
+---
+I used AI to get familiar with python libraries used in my project by asking it how it's used what the the common use cases are. I also used AI to debug weird behaviour caused by Textual CSS. All the code is written by me and nothing is copied over or written directly into my files by AI.
