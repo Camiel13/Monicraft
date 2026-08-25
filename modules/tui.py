@@ -303,6 +303,7 @@ class TUI(App):
                     self.network_usage.update(f"{network_inbound:.2f}/{network_outbound:.2f} MB")
             
         except Exception as e:
+            self.ws = None
             self.console_log.write(f"[bold red]Server connection lost: {e}[/]")
             self.notify(title="Server Connection error",
                         message=f"Server connection lost: {e}",
@@ -329,7 +330,10 @@ class TUI(App):
             return
         
         if not self.ws:
-            await self.connect_ws()
+            self.notify(severity="error",
+                        title="Command failed!",
+                        message="Command could not be sent, no server connection esthablished.")
+            return
             
         try:
             command = f"say {self.chat_mode_prefix + command}" if self.chat_mode else command
@@ -355,7 +359,10 @@ class TUI(App):
             return
         
         if not self.ws:
-            await self.connect_ws()
+            self.notify(severity="error",
+                        title="Power action failed!",
+                        message="Power action could not be sent, no server connection esthablished.")
+            return
         
         try:
             payload = {
