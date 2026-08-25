@@ -1,6 +1,13 @@
 # Monicraft
 Monicraft is a TUI-based application that runs right inside your terminal. It makes it easier to monitor your rented or self-hosted Minecraft server that runs on Pterodactyl panel (or some forked versions of it). It relies on websockets and requests to the REST API to make the app fast and responsive. It gathers it's information by using the [mcstatus](https://github.com/py-mine/mcstatus) python library and inspects NBT data with the [nbtlib](https://github.com/vberlier/nbtlib) python library.
 
+# Usage
+- **Use dummy mode when trying it out without a minecraft server!!**
+- **For the optimal experience, make sure your terminal is fullscreen and zoom out a little if needed (this depends on your screen size and general text size in your OS).**
+- Use the navigate buttons in the bottom left to navigate through the screens.
+- In the player manager, the clicked action will be applied to the selected player in the table.
+- Quitting the app is done by pressing ctrl + q.
+
 ## Features
 - **Real-Time Console Monitoring:** The server console is directly streamed into your terminal and formatted with a `RichLog` widget.
 - **Command Execution:** Minecraft commands can be sent directly to the server. The command will be exectued on the server and the command and it's output will appear in the **console**.
